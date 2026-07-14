@@ -1,6 +1,6 @@
 interface:
   display_name: "jsonspecs Rule Author"
-  short_description: "Author production jsonspecs rule packages"
-  default_prompt: "Use $jsonspecs-rule-author to design, review, and validate a jsonspecs rules package."
+  short_description: "Design and govern jsonspecs rules layers"
+  default_prompt: "Use $jsonspecs-rule-author to design, organize, review, distribute, and validate a jsonspecs business-rules package."
 policy:
   allow_implicit_invocation: true

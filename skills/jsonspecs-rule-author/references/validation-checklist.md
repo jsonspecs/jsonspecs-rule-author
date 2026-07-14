@@ -21,10 +21,21 @@ Use this checklist before handing off a jsonspecs rules package.
 ## Rules
 
 - Guard/contract checks run before dependent business checks.
+- Required checks are followed by `if_present` conditions before format, dictionary, checksum, or cross-field checks.
+- Type-specific blocks run only after the type field is present and supported.
+- Date comparisons run only after participating dates pass format predicates.
 - Multi-field issues have a deliberate primary `field`.
 - Shared rule blocks are referenced through pipelines, not copy-pasted.
 - Wildcard and aggregate rules have samples for empty, passing, failing, and mixed collections.
 - Dictionaries have stable ids and entries are reviewed for duplicates.
+- Entrypoints read as business scenarios rather than long flat check lists.
+
+## Business language
+
+- Field titles, artifact titles, descriptions and messages use business language.
+- Studio-visible labels do not expose `enum`, `payload`, `operator`, `pipeline`, regex internals, or raw artifact ids.
+- Predicates and conditions have clear titles when they appear in condition trees.
+- Product vocabulary is consistent across rules, samples, docs and catalog metadata.
 
 ## Custom operators
 
@@ -55,7 +66,13 @@ Optionally run the skill scripts:
 ```bash
 node /path/to/jsonspecs-rule-author/scripts/audit-manifest-coverage.mjs .
 node /path/to/jsonspecs-rule-author/scripts/validate-package.mjs .
+node /path/to/jsonspecs-rule-author/scripts/audit-guard-order.mjs .
+node /path/to/jsonspecs-rule-author/scripts/audit-business-language.mjs .
+node /path/to/jsonspecs-rule-author/scripts/audit-sample-matrix.mjs .
+node /path/to/jsonspecs-rule-author/scripts/audit-rule-graph.mjs .
 ```
+
+Run audit scripts with `--strict` only when warnings should fail the review.
 
 ## Studio checks
 
@@ -74,3 +91,11 @@ Scan docs for stale sample expectations and old status names. Known risky marker
 - `expected: DEFECT`;
 - obsolete numeric examples such as `7009` when the referenced rule changed;
 - generated "documentation" that is only a flat list of rule titles.
+
+## Distribution and governance
+
+- The execution model is explicit: embedded engine, package dependency, rules service, or hybrid model.
+- Public entrypoints and required `$context` fields are documented.
+- Versioning impact is classified before publishing.
+- Runtime results can identify package version, snapshot/source hash, entrypoint and operator pack.
+- Rule ownership and review path are clear for business-impacting changes.
