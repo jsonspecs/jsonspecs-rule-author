@@ -40,6 +40,9 @@ if (project) {
   if (typeof manifest.project?.version !== 'string' || !semver.test(manifest.project.version)) {
     errors.push('manifest.project.version must be an explicit semantic version');
   }
+  if (typeof manifest.project?.id !== 'string' || manifest.project.id.trim().length === 0) {
+    errors.push('manifest.project.id must be a non-empty string');
+  }
 
   const exportsList = manifest.exports;
   if (!Array.isArray(exportsList) || exportsList.length === 0 || exportsList.some((id) => typeof id !== 'string' || id.length === 0)) {
@@ -100,6 +103,22 @@ if (project) {
       for (const field of collectRulePaths(artifact)) {
         if (field.startsWith('$context.')) usedContextPaths.add(field);
         else usedPayloadPaths.add(field);
+      }
+      if (typeof artifact.value_field === 'string' && artifact.value_field.includes('[*]')) {
+        errors.push(`${repoRel}: value_field cannot contain [*]; Spec 1.0.0-rc.5 does not define aligned wildcard comparison`);
+      }
+      for (const [name, input] of Object.entries(artifact.inputs || {})) {
+        if (typeof input === 'string' && input.includes('[*]')) {
+          errors.push(`${repoRel}: inputs.${name} cannot contain [*] in Spec 1.0.0-rc.5`);
+        }
+      }
+      for (const field of collectRulePaths(artifact)) {
+        if (field.startsWith('$context.') && field.includes('[*]')) {
+          errors.push(`${repoRel}: $context paths cannot contain [*] in Spec 1.0.0-rc.5`);
+        }
+      }
+      if (artifact.operator === 'not_empty' && typeof artifact.field === 'string' && artifact.field.includes('[*]')) {
+        warnings.push(`${repoRel}: not_empty with [*] checks only existing structural matches; it does not require the member in every collection item`);
       }
       const code = artifact.issue?.code;
       if (typeof code === 'string' && code.length > 0) {

@@ -49,3 +49,10 @@ Build information should record at least:
 - source revision and build environment identity when required by governance.
 
 Do not add these fields to the closed snapshot or normative runtime `ruleset` object.
+
+The bundled dynamic verifier checks the derived fields it can reproduce:
+`project.id`, `project.version`, `runtime.package`, `runtime.version`, `specVersion`,
+`sourceHash`, `exports`, `artifactCount`, and the sorted custom operator names. It does
+not prove the identity or digest of an operator-pack distribution from a local module
+path. Record and verify that package identity in the build or deployment system when it
+is part of the release contract.

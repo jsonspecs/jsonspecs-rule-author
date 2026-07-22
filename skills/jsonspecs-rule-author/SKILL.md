@@ -10,8 +10,10 @@ Produce maintainable authoring projects whose executable output is a closed
 
 ## Baseline
 
-- Treat `jsonspecs/spec` `1.0.0-rc.5` as the behavior contract and
-  `@jsonspecs/rules` v3 as the Node.js implementation target.
+- Treat `jsonspecs/spec` `1.0.0-rc.5` as the behavior contract and the published
+  `@jsonspecs/rules` v3 npm package as the Node.js implementation target. Prefer an npm
+  release plus a lockfile over a GitHub archive unless the task explicitly targets an
+  unreleased revision.
 - Separate normative snapshot fields from authoring metadata. `manifest.json`, source
   file `id`, folders, catalog labels, ownership, package version, and build information
   are builder conventions; they do not belong in the executable snapshot.
@@ -45,7 +47,8 @@ Produce maintainable authoring projects whose executable output is a closed
    depends on type, format, dictionary membership, or another business prerequisite.
 9. Add samples for every exported pipeline: success, each major blocking family,
    warnings and exceptions where applicable, branch edges, wildcard empty/mixed cases,
-   and malformed JSON-safe inputs for custom operators.
+   malformed JSON-safe inputs for custom operators, and every reachable issue code or a
+   documented exclusion with a reason.
 10. Build the snapshot in memory, compute `sourceHash` over the whole snapshot without
     `sourceHash`, compile it with the deployed operator registry, run samples, and compare
     any checked-in `dist/snapshot.json` with the rebuilt value.
@@ -85,6 +88,8 @@ Produce maintainable authoring projects whose executable output is a closed
 - Do not use `role`, `strict`, `required_context`, snapshot `meta`, `engine`, or
   `requires` in the executable graph.
 - Add `aggregate` exactly when `field` contains `[*]`. Use `ALL`, `ANY`, or `COUNT`.
+- Do not put `[*]` in `value_field`, named `inputs`, or `$context.*`. A wildcard
+  `not_empty` checks existing matches only; it does not require a member in every item.
 - Ensure every artifact is reachable from `exports`, including `when` rules and
   dictionaries.
 - Keep package version and operator-pack identity in build/deployment records, not in
@@ -103,16 +108,20 @@ node /path/to/scripts/audit-sample-matrix.mjs .
 node /path/to/scripts/validate-package.mjs .
 ```
 
-The audit scripts are read-only. `validate-package.mjs` runs all audits, builds and
-compiles the snapshot in memory with the project's installed `@jsonspecs/rules`, runs
-JSON samples, and checks a committed snapshot when present. Add `--strict` to fail on
-audit warnings. It never downloads a CLI or writes `dist/`.
+The audit scripts are read-only. Use `validate-package.mjs . --static` for an untrusted
+project: it reads JSON and text only and does not load project JavaScript. Without
+`--static`, the verifier loads the project's installed `@jsonspecs/rules` and operator
+modules, compiles the snapshot, executes samples, and checks committed build files.
+Run that mode only for trusted project code. Add `--strict` to fail on audit warnings.
+Neither mode downloads a CLI or writes `dist/`.
 
 ## Completion criteria
 
 - The in-memory snapshot compiles under `@jsonspecs/rules` v3 for
   `specVersion: 1.0.0-rc.5` with the deployment's operator registry.
 - Every export has catalog metadata and executable samples.
+- Samples cover every reachable issue code and applicable boundary class, or record an
+  intentional issue-code exclusion with a non-empty reason.
 - Required `$context.*` dependencies are enforced by rules when absence is a business
   error and documented outside the snapshot.
 - Guard ordering prevents misleading dependent failures.

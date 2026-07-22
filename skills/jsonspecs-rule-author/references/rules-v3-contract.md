@@ -10,6 +10,7 @@ authoring conventions, not fields defined by the behavior specification.
 - [Artifact forms](#artifact-forms)
 - [Rule and issue semantics](#rule-and-issue-semantics)
 - [Wildcards](#wildcards)
+- [Collection structural-check boundaries](#collection-structural-check-boundaries)
 - [Built-in operators](#built-in-operators)
 - [Custom operator boundary](#custom-operator-boundary)
 - [Runtime boundary](#runtime-boundary)
@@ -113,6 +114,28 @@ A wildcard `field` requires `aggregate`; `aggregate` is forbidden without `[*]`.
 `SKIP` values leave the effective population. `when` expressions do short-circuit from
 left to right.
 
+## Collection structural-check boundaries
+
+RC.5 resolves paths against a flattened structural map. Scalars, `null`, empty objects,
+and empty arrays are leaves. A non-empty object or array has no path of its own in that
+map; only its descendant leaves exist.
+
+Consequences for collection checks:
+
+- `items[*].sku` matches only `sku` leaves that actually exist. A `not_empty` rule on
+  that path cannot detect that one item omits `sku` while another item has it.
+- `aggregate.onEmpty` applies only when the wildcard expression has zero total
+  structural matches. It does not detect a missing member in part of a collection.
+- Named `inputs`, `value_field`, and `$context.*` paths cannot contain `[*]`.
+- An element-aligned comparison such as `items[*].returnQty` against
+  `items[*].purchasedQty` is not defined in RC.5. Use a custom operator over a supported
+  non-wildcard input shape or validate the aligned relationship outside this layer.
+
+When every collection item must contain a member, do not present wildcard `not_empty`
+as proof of that invariant. Model a supported count/value rule when possible, use a
+custom operator with explicit JSON-safe behavior, or enforce the invariant at the host
+boundary.
+
 ## Built-in operators
 
 Presence: `not_empty`, `is_empty`, `not_true`, `any_filled`.
@@ -167,9 +190,12 @@ module.exports = Object.freeze({
 });
 ```
 
-The schema must explicitly close the top configuration object, the `inputs` object,
-and the immediate `params` object. `evaluate` receives resolved values only. It never
-receives payload, context, paths, a resolver, time, locale, or the rule use site.
+The schema validates authored rule configuration: operand path strings and constant
+parameters. It does not validate the business value found at runtime. The schema must
+explicitly close the top configuration object, the `inputs` object, and the immediate
+`params` object. `evaluate` receives resolved values only and must safely handle every
+JSON type. It never receives payload, context, paths, a resolver, time, locale, or the
+rule use site.
 
 ## Runtime boundary
 

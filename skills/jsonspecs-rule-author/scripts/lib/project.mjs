@@ -35,7 +35,8 @@ export function parseOptions(argv = process.argv.slice(2)) {
   return {
     rootArg: argv.find((arg) => !arg.startsWith('--')) || '.',
     json: argv.includes('--json'),
-    strict: argv.includes('--strict')
+    strict: argv.includes('--strict'),
+    static: argv.includes('--static')
   };
 }
 
@@ -161,6 +162,20 @@ export function artifactRefs(artifact) {
   for (const ref of whenRefs(artifact?.when)) refs.add(ref);
   if (typeof artifact?.dictionary === 'string') refs.add(artifact.dictionary);
   return refs;
+}
+
+export function reachableIds(project, rootId) {
+  const reachable = new Set();
+  const pending = [rootId];
+  while (pending.length > 0) {
+    const id = pending.pop();
+    if (reachable.has(id)) continue;
+    reachable.add(id);
+    const artifact = project.artifacts.get(id)?.artifact;
+    if (!artifact) continue;
+    for (const ref of artifactRefs(artifact)) pending.push(ref);
+  }
+  return reachable;
 }
 
 export function sourceArtifactsObject(project) {

@@ -17,7 +17,8 @@ Spec `1.0.0-rc.5`.
 
 ## Compatibility
 
-- `package.json` resolves `@jsonspecs/rules` major version 3.
+- `package.json` resolves the published `@jsonspecs/rules` major version 3 package from
+  npm, and the lockfile records the exact installed release.
 - The snapshot has `formatVersion: 2` and `specVersion: "1.0.0-rc.5"`.
 - The builder uses `computeSourceHash` over the whole snapshot without `sourceHash`.
 - The compiler call is `compileSnapshot`; execution passes one object with
@@ -47,6 +48,8 @@ Spec `1.0.0-rc.5`.
 - A checked-in `dist/snapshot.json` exactly matches an in-memory rebuild.
 - Build information records package, runtime, source revision, and operator-pack
   identity outside the snapshot.
+- Derived `build-info.json` fields match the current manifest, runtime, snapshot,
+  artifact count, exports, and custom operator names.
 
 ## Rules and issues
 
@@ -66,6 +69,11 @@ Spec `1.0.0-rc.5`.
 - Modes are `ALL`, `ANY`, or `COUNT`; legacy `EACH`, `MIN`, and `MAX` are absent.
 - `ALL`/`ANY` with issue declares `EACH` or `SUMMARY`; `COUNT` has no `issueMode`.
 - Empty, all-skip, mixed, and failure cases are sampled where meaningful.
+- Non-empty objects and arrays are not treated as their own flattened leaf paths.
+- A wildcard presence rule is not used as proof that every item contains the member.
+- `onEmpty` is understood as zero total matches, not partial member absence.
+- `value_field`, named `inputs`, and `$context.*` contain no `[*]`; no aligned wildcard
+  comparison is assumed.
 - Dictionary entries are unique non-null scalars; labels and aliases are lowered outside
   the executable dictionary.
 
@@ -73,6 +81,8 @@ Spec `1.0.0-rc.5`.
 
 - Registry shape is `name -> { schema, evaluate }`, not `{ check, predicate }`.
 - Schemas close the top level, named `inputs`, and immediate `params` object.
+- Schemas validate authored rule configuration, not runtime business value types;
+  `evaluate` safely handles every JSON type.
 - Runtime dependencies use operands or named `inputs`; constants use `params`.
 - `evaluate` receives values only and returns exactly `PASS`, `FAIL`, or `SKIP`.
 - Golden vectors cover missing inputs, `null`, wrong JSON-safe types, boundaries, and
@@ -83,22 +93,29 @@ Spec `1.0.0-rc.5`.
 
 - Samples use top-level `pipelineId`; it is not hidden in `context`.
 - Every export has at least one `OK` and one error/warning/exception case.
+- Every reachable issue code is asserted by a sample or has a manifest exclusion with a
+  non-empty reason.
 - Expected issues assert order as well as stable fields.
 - Conditional branches cover true and false paths.
+- Applicable boundary classes cover absence, `null`, empty strings, wrong types,
+  unsupported dictionary values and branches, and empty/mixed collections.
 - Wildcard and custom-operator edge cases are present.
 
 ## Commands
 
-Run the read-only package verifier:
+Run the package verifier. Neither mode writes project files:
 
 ```bash
+node /path/to/scripts/validate-package.mjs . --static
 node /path/to/scripts/validate-package.mjs .
 node /path/to/scripts/validate-package.mjs . --strict
 ```
 
-It runs all bundled audits, resolves the project's installed `@jsonspecs/rules`, builds
-and compiles the snapshot in memory, executes samples, and compares a checked-in
-snapshot when one exists. It does not download packages or write build output.
+Use `--static` first for untrusted projects. That mode runs only text and JSON audits;
+it never loads project JavaScript. The default mode resolves the project's installed
+`@jsonspecs/rules`, loads custom operator modules, builds and compiles the snapshot,
+executes samples, and compares checked-in build files. It therefore executes trusted
+project code. Neither mode downloads packages or writes build output.
 
 Run the project's own build command afterward when distribution files need updating,
 then rerun the verifier to prove that `dist/snapshot.json` is current.

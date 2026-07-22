@@ -33,7 +33,7 @@ module.exports = Object.freeze({
       additionalProperties: false
     }),
     evaluate({ field }) {
-      return validTaxId(field) ? "PASS" : "FAIL";
+      return typeof field === "string" && validTaxId(field) ? "PASS" : "FAIL";
     }
   })
 });
@@ -44,6 +44,10 @@ v3. The operator receives resolved values, not paths, payload, context, `ctx.get
 `ctx.has`, a resolver, or the rule use site.
 
 ## Schema requirements
+
+The schema validates the authored rule configuration, such as the presence and shape
+of the `field` path string and `params`. It does not validate the business value that
+the path resolves to during execution.
 
 - Close the top configuration object with a finite explicit property set.
 - If `inputs` is accepted, close it and enumerate all allowed names.
@@ -60,6 +64,7 @@ path is missing, model that dependency as a named `inputs` member and handle abs
 ## Evaluation requirements
 
 - Return exactly `PASS`, `FAIL`, or `SKIP` synchronously.
+- Safely handle every JSON runtime type, regardless of the configured operand schema.
 - Do not throw for malformed-but-JSON-safe business input; return a declared outcome.
 - Do not read time, locale, network, environment variables, or mutable process globals.
 - Do not mutate invocation data.

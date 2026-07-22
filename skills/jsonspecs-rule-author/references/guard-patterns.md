@@ -10,6 +10,7 @@ Use this reference to prevent dependent checks from producing misleading issues.
 - [Cross-field comparisons](#cross-field-comparisons)
 - [Context guards](#context-guards)
 - [Wildcards](#wildcards)
+- [Unsupported branch anti-pattern](#unsupported-branch-anti-pattern)
 - [Review test](#review-test)
 
 ## Absence semantics
@@ -83,7 +84,13 @@ if present → format issue → if format passes: business comparison
 Boolean policy:
 
 ```text
-required → type is boolean → if boolean: value constraint
+required → type is boolean → if type passes: value constraint
+```
+
+Numeric range:
+
+```text
+required → type is number → if type passes: range
 ```
 
 Choice group:
@@ -95,7 +102,13 @@ any_filled step → for each present choice: format condition
 Dictionary branch:
 
 ```text
-required → supported-value issue → if supported value: branch-specific block
+required → supported dictionary value → if supported: branch-specific block
+```
+
+Format-sensitive algorithm:
+
+```text
+format → if format passes: algorithm
 ```
 
 ## Cross-field comparisons
@@ -126,6 +139,24 @@ For a wildcard rule, decide separately:
 Every match is evaluated; aggregate modes do not short-circuit. Guard the operator's
 input contract before a custom wildcard rule where possible, and sample empty, all-pass,
 mixed, all-fail, and all-skip populations that matter to the scenario.
+
+A wildcard sees existing flattened leaves only. For example, `not_empty` on
+`items[*].sku` does not fail merely because one item omits `sku` when another item has
+it. `onEmpty` means that the whole expression has zero matches, not that some items
+lack the member. Do not use an aligned wildcard `value_field`; RC.5 does not define
+element pairing between two wildcard paths.
+
+## Unsupported branch anti-pattern
+
+A predicate such as `reason not_equals "DEFECT"` proves only inequality. It does not
+prove that `reason` belongs to the supported dictionary. Before entering a supported
+branch, combine it with an `in_dictionary` predicate for the same field:
+
+```text
+when all: reason is in supported dictionary, reason is not DEFECT
+```
+
+Otherwise an unknown value can enter a branch intended for known non-defect reasons.
 
 ## Review test
 

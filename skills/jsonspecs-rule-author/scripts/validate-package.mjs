@@ -49,9 +49,17 @@ for (const script of auditScripts) {
   notes.push(`${script}: ${report.ok ? 'OK' : 'issues found'}`);
 }
 
-const projectErrors = [];
-const project = loadProject(root, projectErrors);
-errors.push(...projectErrors.map((message) => `runtime build: ${message}`));
+if (options.static) {
+  notes.push('static mode: project JavaScript was not loaded and samples were not executed');
+} else {
+  runDynamicValidation();
+}
+
+function runDynamicValidation() {
+  notes.push('dynamic mode: installed runtime and project operator modules are loaded and executed as trusted code');
+  const projectErrors = [];
+  const project = loadProject(root, projectErrors);
+  errors.push(...projectErrors.map((message) => `runtime build: ${message}`));
 
 if (project && projectErrors.length === 0) {
   try {
@@ -136,12 +144,19 @@ if (project && projectErrors.length === 0) {
       const info = readJson(buildInfoFile, infoErrors, root);
       errors.push(...infoErrors.map((message) => `build info: ${message}`));
       if (info) {
-        for (const [key, expected] of [['specVersion', snapshot.specVersion], ['sourceHash', snapshot.sourceHash]]) {
-          if (Object.prototype.hasOwnProperty.call(info, key) && info[key] !== expected) {
-            errors.push(`${relative(root, buildInfoFile)}: ${key} does not match the snapshot`);
-          }
-        }
+        const label = relative(root, buildInfoFile);
+        checkBuildInfo(errors, label, 'project.id', info.project?.id, project.manifest.project?.id);
+        checkBuildInfo(errors, label, 'project.version', info.project?.version, project.manifest.project?.version);
+        checkBuildInfo(errors, label, 'runtime.package', info.runtime?.package, '@jsonspecs/rules');
+        checkBuildInfo(errors, label, 'runtime.version', info.runtime?.version, runtime.version);
+        checkBuildInfo(errors, label, 'specVersion', info.specVersion, snapshot.specVersion);
+        checkBuildInfo(errors, label, 'sourceHash', info.sourceHash, snapshot.sourceHash);
+        checkBuildInfo(errors, label, 'exports', info.exports, snapshot.exports);
+        checkBuildInfo(errors, label, 'artifactCount', info.artifactCount, Object.keys(snapshot.artifacts).length);
+        checkBuildInfo(errors, label, 'operators', info.operators, Object.keys(operators).sort());
       }
+    } else {
+      warnings.push(`${relative(root, buildInfoFile)} is missing; build identity was not verified`);
     }
   } catch (cause) {
     const diagnostics = Array.isArray(cause?.diagnostics)
@@ -149,6 +164,7 @@ if (project && projectErrors.length === 0) {
       : '';
     errors.push(`Rules v3 compilation failed: ${cause.message}${diagnostics}`);
   }
+}
 }
 
 const uniqueErrors = [...new Set(errors)];
@@ -171,4 +187,12 @@ function isObjectSubset(expected, actual) {
 function appendAuditMessages(target, script, messages, limit = 100) {
   for (const message of messages.slice(0, limit)) target.push(`${script}: ${message}`);
   if (messages.length > limit) target.push(`${script}: ${messages.length - limit} additional messages omitted`);
+}
+
+function checkBuildInfo(target, label, field, actual, expected) {
+  if (actual === undefined) {
+    target.push(`${label}: required derived field ${field} is missing`);
+  } else if (!isDeepStrictEqual(actual, expected)) {
+    target.push(`${label}: ${field} does not match the current project build`);
+  }
 }
