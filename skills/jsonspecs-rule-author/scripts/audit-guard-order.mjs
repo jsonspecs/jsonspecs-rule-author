@@ -58,7 +58,6 @@ function primaryPaths(rule) {
 if (project) {
   const contextPresence = new Set();
   const contextValueUses = new Set();
-  let documentedHostContext = 0;
 
   for (const { artifact } of project.records) {
     if (artifact.type !== 'rule') continue;
@@ -71,11 +70,7 @@ if (project) {
 
   for (const field of [...contextValueUses].sort(compareUtf16)) {
     if (!contextPresence.has(field)) {
-      const metadata = project.manifest.catalog?.fields?.[field];
-      const documented = typeof metadata?.title === 'string' && metadata.title.trim() &&
-        typeof metadata?.description === 'string' && metadata.description.trim();
-      if (documented) documentedHostContext += 1;
-      else warnings.push(`${field}: used by value logic without a not_empty rule or complete catalog documentation`);
+      warnings.push(`${field}: used by value logic without an analyst-authored not_empty rule`);
     }
   }
 
@@ -106,7 +101,7 @@ if (project) {
 
     if (artifact.type === 'condition') {
       const guards = whenRefs(artifact.when);
-      if (guards.size === 0) warnings.push(`${id}: condition has no recognizable Rules v3 when leaf`);
+      if (guards.size === 0) warnings.push(`${id}: condition has no recognizable Rules v4 when leaf`);
       const guardRules = [...guards]
         .map((guardId) => ({ id: guardId, artifact: project.artifacts.get(guardId)?.artifact }))
         .filter(({ artifact: guard }) => guard?.type === 'rule');
@@ -122,7 +117,6 @@ if (project) {
 
   notes.push(`artifacts inspected: ${project.records.length}`);
   notes.push(`context paths with explicit presence rule: ${contextPresence.size}`);
-  notes.push(`context paths documented as an external contract: ${documentedHostContext}`);
   notes.push(`guard-order warnings: ${warnings.length}`);
 }
 
@@ -132,7 +126,7 @@ process.exitCode = finish({
   notes,
   json: options.json,
   strict: options.strict,
-  successMessage: 'Rules v3 guard-order audit OK'
+  successMessage: 'Rules v4 guard-order audit OK'
 });
 
 function isDependentCheck(prerequisite, operator) {

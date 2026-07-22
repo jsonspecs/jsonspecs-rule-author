@@ -43,7 +43,7 @@ Order steps so that issue order tells a coherent business story:
 7. prohibitions and `EXCEPTION` stops;
 8. advisory warnings.
 
-Rules v3 continues after `ERROR`; it stops only after an `EXCEPTION` issue or technical
+Rules v4 continues after `ERROR`; it stops only after an `EXCEPTION` issue or technical
 `ABORT`. Use a condition when a later failure would be misleading unless an earlier
 type, format, dictionary, or business prerequisite passed.
 

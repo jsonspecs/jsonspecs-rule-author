@@ -14,7 +14,7 @@ Use this reference when editing `manifest.json` or user-facing metadata.
 
 ## Boundary
 
-Spec 1.0.0-rc.5 does not define `manifest.json`. It defines only the executable
+Spec 1.0.0-rc.7 does not define `manifest.json`. It defines only the executable
 snapshot. A project manifest is an authoring convention that should give the builder
 enough information without leaking metadata into the snapshot.
 
@@ -39,7 +39,7 @@ Recommended minimum:
     "snapshotFile": "snapshot.json",
     "buildInfoFile": "build-info.json"
   },
-  "specVersion": "1.0.0-rc.5",
+  "specVersion": "1.0.0-rc.7",
   "exports": ["entrypoints.checkout.validation"],
   "catalog": {
     "fields": {},
@@ -58,7 +58,7 @@ snapshot. `specVersion` and `exports` are copied into the snapshot by the builde
 Use `catalog.fields[path].title` as the primary human label and `description` as
 supporting text. Add exact wildcard keys such as `order.items[*].sku`.
 
-Catalog `$context.*` paths when Studio or reviewers show them. In all cases, document
+Catalog `$context.*` paths when Sandbox or reviewers show them. In all cases, document
 their presence and semantics because the snapshot cannot declare `required_context`.
 
 ## Export metadata
@@ -84,13 +84,13 @@ Add `catalog.artifacts[id]` for items visible in flow diagrams and diagnostics:
 - nested pipelines;
 - dictionaries when reviewers need a human label.
 
-Do not add `description` directly to RC.5 artifact values; the snapshot schema rejects
+Do not add `description` directly to RC.7 artifact values; the snapshot schema rejects
 it.
 
 ## Operator metadata
 
 Describe every custom operator in `catalog.operators[name].description` or another
-documented authoring metadata source. The v3 runtime registry itself is a flat map of
+documented authoring metadata source. The v4 runtime registry itself is a flat map of
 `name -> { schema, evaluate }`; metadata is not passed to `createEngine` and not hashed
 into the snapshot unless copied into `rule.issue.meta` deliberately.
 
@@ -130,9 +130,9 @@ sample annotation:
 ```
 
 Allowed class names are `absence`, `null`, `empty_string`, `wrong_type`,
-`unsupported_dictionary`, `empty_collection`, `mixed_collection`, and
-`unsupported_branch`. An annotation is audit metadata only; it is not passed to
-`runPipeline` and does not weaken expected result assertions.
+`unsupported_dictionary`, `empty_collection`, `missing_collection_member`,
+`mixed_collection`, and `unsupported_branch`. An annotation is audit metadata only; it
+is not passed to `runPipeline` and does not weaken expected result assertions.
 
 ## Verification
 

@@ -1,4 +1,4 @@
-# Guard patterns for Rules v3
+# Guard patterns for Rules v4
 
 Use this reference to prevent dependent checks from producing misleading issues.
 
@@ -15,7 +15,7 @@ Use this reference to prevent dependent checks from producing misleading issues.
 
 ## Absence semantics
 
-Requiredness is always a separate presence rule. In Rules v3:
+Requiredness is always a separate presence rule. In Rules v4:
 
 - `not_empty`, `is_empty`, `not_true`, and `any_filled` observe absent paths;
 - every other built-in and every custom operator receives core-level `SKIP` when its
@@ -53,7 +53,7 @@ Use separate format artifacts when both an issue-producing step and a guard are 
 
 This duplication is semantic, not accidental: one rule reports a problem, while the
 other is a side-effect-free condition leaf. If the project allows a rule with `issue` in
-`when`, reuse it there; RC.5 ignores `issue` during `when` evaluation.
+`when`, reuse it there; RC.7 ignores `issue` during `when` evaluation.
 
 ## Common chains
 
@@ -120,13 +120,10 @@ the comparison issue misleading.
 
 ## Context guards
 
-There is no `required_context` artifact field. When missing context must be a business
-issue, use `not_empty` on `$context.*` as an early step. Then gate format-sensitive or
+There is no `required_context` artifact field. Context completeness is checked by
+analyst-authored rules inside `steps`, like payload completeness. Use `not_empty` on
+required `$context.*` paths as early steps, then gate format-sensitive or
 domain-sensitive comparisons as usual.
-
-If missing context is a caller contract violation that should not become a business
-issue, validate it in the host before `runPipeline`; do not invent a new runtime result
-field or `ABORT` code.
 
 ## Wildcards
 
@@ -140,11 +137,16 @@ Every match is evaluated; aggregate modes do not short-circuit. Guard the operat
 input contract before a custom wildcard rule where possible, and sample empty, all-pass,
 mixed, all-fail, and all-skip populations that matter to the scenario.
 
-A wildcard sees existing flattened leaves only. For example, `not_empty` on
-`items[*].sku` does not fail merely because one item omits `sku` when another item has
-it. `onEmpty` means that the whole expression has zero matches, not that some items
-lack the member. Do not use an aligned wildcard `value_field`; RC.5 does not define
-element pairing between two wildcard paths.
+RC.7 enumerates real array indices. After the final wildcard, an omitted or impassable
+child remains an absent structural candidate. Therefore `not_empty` on `items[*].sku`
+with `issueMode: "EACH"` can report a concrete path such as `items[1].sku`. `onEmpty`
+means that the whole expression has zero structural candidates; it does not handle an
+omitted child in an existing item. Before a later wildcard, an impassable branch creates
+no candidate because there is no real next array to enumerate.
+
+Do not use an aligned wildcard `value_field`; RC.7 does not define element pairing
+between two wildcard paths. Treat exact index tokens as decimal strings with no
+implementation-sized upper bound and never round them through `Number`.
 
 ## Unsupported branch anti-pattern
 

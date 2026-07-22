@@ -1,4 +1,4 @@
-# Custom operator policy for Rules v3
+# Custom operator policy for Rules v4
 
 Read this reference before adding, migrating, or approving a custom operator.
 
@@ -11,7 +11,7 @@ Read this reference before adding, migrating, or approving a custom operator.
 
 Built-ins cover presence, types, equality, string containment and length, portable
 regular expressions, numeric/date ordering, field-to-field comparison, and dictionary
-membership. See `rules-v3-contract.md` for the complete list.
+membership. See `rules-v4-contract.md` for the complete list.
 
 Appropriate custom operators include checksums, regulated identifier algorithms,
 cryptographic verification over supplied values, and versioned domain scoring.
@@ -40,7 +40,7 @@ module.exports = Object.freeze({
 ```
 
 The old `{ check, predicate }` pack and `(rule, ctx)` function contract are not Rules
-v3. The operator receives resolved values, not paths, payload, context, `ctx.get`,
+v4. The operator receives resolved values, not paths, payload, context, `ctx.get`,
 `ctx.has`, a resolver, or the rule use site.
 
 ## Schema requirements

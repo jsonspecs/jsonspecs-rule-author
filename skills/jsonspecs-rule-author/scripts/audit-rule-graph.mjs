@@ -109,5 +109,5 @@ process.exitCode = finish({
   notes,
   json: options.json,
   strict: options.strict,
-  successMessage: 'Rules v3 graph audit OK'
+  successMessage: 'Rules v4 graph audit OK'
 });

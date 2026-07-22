@@ -7,6 +7,7 @@ import {
   reachableIds,
   readJson,
   relative,
+  resolveSamplePath,
   walkFiles,
   whenRefs
 } from './lib/project.mjs';
@@ -25,6 +26,7 @@ const coverageClasses = new Set([
   'wrong_type',
   'unsupported_dictionary',
   'empty_collection',
+  'missing_collection_member',
   'mixed_collection',
   'unsupported_branch'
 ]);
@@ -171,7 +173,7 @@ process.exitCode = finish({
   notes,
   json: options.json,
   strict: options.strict,
-  successMessage: 'Rules v3 sample matrix audit OK',
+  successMessage: 'Rules v4 sample matrix audit OK',
   extra: { matrix }
 });
 
@@ -208,6 +210,7 @@ function applicableCoverageClasses(rules, unsupportedBranches) {
     if (rule.operator === 'in_dictionary') applicable.add('unsupported_dictionary');
     if (typeof rule.field === 'string' && rule.field.includes('[*]')) {
       applicable.add('empty_collection');
+      if (rule.operator === 'not_empty') applicable.add('missing_collection_member');
       if (rule.aggregate?.issueMode === 'EACH') applicable.add('mixed_collection');
     }
   }
@@ -275,10 +278,11 @@ function inferRuleCoverage(sample, coverage, expectedCodeCounts) {
     const code = rule.issue?.code;
     if (!code || !expectedCodeCounts.has(code)) continue;
     const paths = rule.operator === 'any_filled' ? rule.fields || [] : [rule.field].filter(Boolean);
-    const resolutions = paths.map((field) => resolvePath(sample, field));
+    const resolutions = paths.map((field) => resolveSamplePath(sample, field));
 
     if (presenceOperators.has(rule.operator)) {
-      if (resolutions.some((result) => result.values.length === 0 && !result.emptyWildcard)) coverage.coveredClasses.add('absence');
+      if (resolutions.some((result) => result.absentCount > 0 ||
+          (result.matchedCount === 0 && !result.emptyWildcard))) coverage.coveredClasses.add('absence');
       if (resolutions.some((result) => result.values.some((value) => value === null))) coverage.coveredClasses.add('null');
       if (resolutions.some((result) => result.values.some((value) => value === ''))) coverage.coveredClasses.add('empty_string');
     }
@@ -286,9 +290,12 @@ function inferRuleCoverage(sample, coverage, expectedCodeCounts) {
     if (rule.operator === 'in_dictionary') {
       coverage.coveredClasses.add('unsupported_dictionary');
     }
-    if (rule.aggregate?.issueMode === 'EACH' && resolutions[0]?.values.length > 1) {
+    if (rule.operator === 'not_empty' && resolutions[0]?.absentCount > 0) {
+      coverage.coveredClasses.add('missing_collection_member');
+    }
+    if (rule.aggregate?.issueMode === 'EACH' && resolutions[0]?.matchedCount > 1) {
       const failures = expectedCodeCounts.get(code) || 0;
-      if (failures > 0 && failures < resolutions[0].values.length) coverage.coveredClasses.add('mixed_collection');
+      if (failures > 0 && failures < resolutions[0].matchedCount) coverage.coveredClasses.add('mixed_collection');
     }
   }
   for (const branch of coverage.unsupportedBranches) {
@@ -302,49 +309,8 @@ function inferRuleCoverage(sample, coverage, expectedCodeCounts) {
 function inferCollectionCoverage(sample, coverage) {
   for (const rule of coverage.rules) {
     if (typeof rule.field !== 'string' || !rule.field.includes('[*]')) continue;
-    if (resolvePath(sample, rule.field).emptyWildcard) coverage.coveredClasses.add('empty_collection');
+    if (resolveSamplePath(sample, rule.field).emptyWildcard) coverage.coveredClasses.add('empty_collection');
   }
-}
-
-function resolvePath(sample, field) {
-  const fromContext = field.startsWith('$context.');
-  const expression = fromContext ? field.slice('$context.'.length) : field;
-  const tokens = tokenizePath(expression);
-  let values = [fromContext ? sample.context : sample.payload];
-  let emptyWildcard = false;
-  for (const token of tokens) {
-    const next = [];
-    for (const value of values) {
-      if (token === '*') {
-        if (Array.isArray(value)) {
-          if (value.length === 0) emptyWildcard = true;
-          next.push(...value);
-        }
-      } else if (typeof token === 'number') {
-        if (Array.isArray(value) && token < value.length) next.push(value[token]);
-      } else if (value !== null && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, token)) {
-        next.push(value[token]);
-      }
-    }
-    values = next;
-  }
-  return { values: values.filter(isFlattenedLeaf), emptyWildcard };
-}
-
-function tokenizePath(expression) {
-  const tokens = [];
-  const matcher = /(?:^|\.)([^.[\]]+)|\[(\d+|\*)\]/g;
-  let match;
-  while ((match = matcher.exec(expression)) !== null) {
-    tokens.push(match[1] ?? (match[2] === '*' ? '*' : Number(match[2])));
-  }
-  return tokens;
-}
-
-function isFlattenedLeaf(value) {
-  if (value === null || typeof value !== 'object') return true;
-  if (Array.isArray(value)) return value.length === 0;
-  return Object.keys(value).length === 0;
 }
 
 function difference(source, ...subtractions) {

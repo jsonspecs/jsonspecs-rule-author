@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
-export const SPEC_VERSION = '1.0.0-rc.5';
+export const SPEC_VERSION = '1.0.0-rc.7';
 export const BUILTIN_OPERATORS = new Set([
   'not_empty',
   'is_empty',
@@ -178,6 +178,87 @@ export function reachableIds(project, rootId) {
   return reachable;
 }
 
+export function resolveSamplePath(sample, field) {
+  const fromContext = field.startsWith('$context.');
+  const expression = fromContext ? field.slice('$context.'.length) : field;
+  const tokens = tokenizePath(expression);
+  const rootValue = fromContext ? sample.context : sample.payload;
+  let candidates = [{ present: rootValue !== undefined, value: rootValue }];
+  let emptyWildcard = false;
+  let wildcardSeen = false;
+  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
+    const token = tokens[tokenIndex];
+    const laterWildcard = tokens.slice(tokenIndex + 1).some((item) => item.kind === 'wildcard');
+    const next = [];
+    for (const candidate of candidates) {
+      if (token.kind === 'wildcard') {
+        if (candidate.present && Array.isArray(candidate.value)) {
+          if (candidate.value.length === 0) emptyWildcard = true;
+          for (const value of candidate.value) next.push({ present: true, value });
+        }
+        continue;
+      }
+      if (!candidate.present) {
+        if (wildcardSeen && !laterWildcard) next.push(candidate);
+        continue;
+      }
+
+      let resolved;
+      if (token.kind === 'index' && Array.isArray(candidate.value) && exactIndexInRange(token.raw, candidate.value.length)) {
+        resolved = candidate.value[Number(token.raw)];
+      } else if (token.kind === 'key' && candidate.value !== null &&
+          typeof candidate.value === 'object' && !Array.isArray(candidate.value) &&
+          Object.prototype.hasOwnProperty.call(candidate.value, token.value)) {
+        resolved = candidate.value[token.value];
+      } else {
+        if (wildcardSeen && !laterWildcard) next.push({ present: false });
+        continue;
+      }
+      next.push({ present: true, value: resolved });
+    }
+    candidates = next;
+    if (token.kind === 'wildcard') wildcardSeen = true;
+  }
+
+  const leaves = [];
+  for (const candidate of candidates) {
+    if (!candidate.present) leaves.push(candidate);
+    else if (isFlattenedLeaf(candidate.value)) leaves.push(candidate);
+    else if (wildcardSeen) leaves.push({ present: false });
+  }
+  return {
+    values: leaves.filter((candidate) => candidate.present).map((candidate) => candidate.value),
+    absentCount: leaves.filter((candidate) => !candidate.present).length,
+    matchedCount: leaves.length,
+    emptyWildcard
+  };
+}
+
+function tokenizePath(expression) {
+  const tokens = [];
+  const matcher = /(?:^|\.)([^.[\]]+)|\[(\d+|\*)\]/g;
+  let match;
+  while ((match = matcher.exec(expression)) !== null) {
+    if (match[1] !== undefined) tokens.push({ kind: 'key', value: match[1] });
+    else if (match[2] === '*') tokens.push({ kind: 'wildcard' });
+    else tokens.push({ kind: 'index', raw: match[2] });
+  }
+  return tokens;
+}
+
+function exactIndexInRange(raw, length) {
+  if (!/^(?:0|[1-9]\d*)$/.test(raw)) return false;
+  const limit = String(length);
+  if (raw.length !== limit.length) return raw.length < limit.length;
+  return raw < limit;
+}
+
+function isFlattenedLeaf(value) {
+  if (value === null || typeof value !== 'object') return true;
+  if (Array.isArray(value)) return value.length === 0;
+  return Object.keys(value).length === 0;
+}
+
 export function sourceArtifactsObject(project) {
   const entries = project.records.map(({ id, artifact }) => {
     const { id: ignored, ...value } = artifact;
@@ -213,12 +294,27 @@ export function loadRuntime(project) {
   }
 
   const major = Number.parseInt(String(runtimePackage.version || '').split('.')[0], 10);
-  if (major !== 3) throw new Error(`@jsonspecs/rules ${runtimePackage.version || '<unknown>'} is not Rules v3`);
+  if (major !== 4) throw new Error(`@jsonspecs/rules ${runtimePackage.version || '<unknown>'} is not Rules v4`);
   for (const name of ['createEngine', 'computeSourceHash']) {
-    if (typeof runtime[name] !== 'function') throw new Error(`@jsonspecs/rules v3 API is missing ${name}`);
+    if (typeof runtime[name] !== 'function') throw new Error(`@jsonspecs/rules v4 API is missing ${name}`);
   }
 
   return { ...runtime, version: runtimePackage.version, requireFromProject };
+}
+
+export function loadCli(project, runtime) {
+  let cliPackage;
+  let bin;
+  try {
+    cliPackage = runtime.requireFromProject('jsonspecs-cli/package.json');
+    bin = runtime.requireFromProject.resolve('jsonspecs-cli/bin/jsonspecs.js');
+  } catch (cause) {
+    throw new Error(`cannot resolve project jsonspecs-cli: ${cause.message}`);
+  }
+
+  const major = Number.parseInt(String(cliPackage.version || '').split('.')[0], 10);
+  if (major !== 4) throw new Error(`jsonspecs-cli ${cliPackage.version || '<unknown>'} is not CLI v4`);
+  return { version: cliPackage.version, bin };
 }
 
 export function loadOperatorRegistry(project, runtime) {
@@ -226,10 +322,7 @@ export function loadOperatorRegistry(project, runtime) {
   if (specs !== undefined && !Array.isArray(specs)) {
     throw new Error('manifest.operatorPacks.node must be an array when present');
   }
-  if (specs === undefined) {
-    const conventional = path.join(project.root, 'operators', 'node');
-    specs = exists(conventional) ? [conventional] : [];
-  }
+  if (specs === undefined) specs = [];
 
   const registry = Object.create(null);
   for (const spec of specs) {
@@ -244,7 +337,7 @@ export function loadOperatorRegistry(project, runtime) {
     if (loaded?.check || loaded?.predicate) {
       throw new Error(`operator pack ${spec} uses the legacy {check,predicate} contract`);
     }
-    const candidate = loaded?.operators && typeof loaded.operators === 'object' ? loaded.operators : loaded;
+    const candidate = loaded;
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
       throw new Error(`operator pack ${spec} must export name -> {schema,evaluate}`);
     }

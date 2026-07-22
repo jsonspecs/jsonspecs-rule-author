@@ -10,6 +10,7 @@ import {
   finish,
   loadProject,
   parseOptions,
+  readJson,
   relative,
   walkFiles
 } from './lib/project.mjs';
@@ -43,6 +44,8 @@ if (project) {
   if (typeof manifest.project?.id !== 'string' || manifest.project.id.trim().length === 0) {
     errors.push('manifest.project.id must be a non-empty string');
   }
+
+  checkPackageCompatibility(root, errors, warnings);
 
   const exportsList = manifest.exports;
   if (!Array.isArray(exportsList) || exportsList.length === 0 || exportsList.some((id) => typeof id !== 'string' || id.length === 0)) {
@@ -85,7 +88,7 @@ if (project) {
     }
 
     for (const key of legacyKeys) {
-      if (Object.prototype.hasOwnProperty.call(artifact, key)) errors.push(`${repoRel}: legacy/authoring field ${key} cannot enter an RC.5 artifact`);
+      if (Object.prototype.hasOwnProperty.call(artifact, key)) errors.push(`${repoRel}: legacy/authoring field ${key} cannot enter an RC.7 artifact`);
     }
     for (const key of ['level', 'code', 'message', 'meta']) {
       if (Object.prototype.hasOwnProperty.call(artifact, key)) errors.push(`${repoRel}: move rule.${key} into rule.issue`);
@@ -105,20 +108,17 @@ if (project) {
         else usedPayloadPaths.add(field);
       }
       if (typeof artifact.value_field === 'string' && artifact.value_field.includes('[*]')) {
-        errors.push(`${repoRel}: value_field cannot contain [*]; Spec 1.0.0-rc.5 does not define aligned wildcard comparison`);
+        errors.push(`${repoRel}: value_field cannot contain [*]; Spec 1.0.0-rc.7 does not define aligned wildcard comparison`);
       }
       for (const [name, input] of Object.entries(artifact.inputs || {})) {
         if (typeof input === 'string' && input.includes('[*]')) {
-          errors.push(`${repoRel}: inputs.${name} cannot contain [*] in Spec 1.0.0-rc.5`);
+          errors.push(`${repoRel}: inputs.${name} cannot contain [*] in Spec 1.0.0-rc.7`);
         }
       }
       for (const field of collectRulePaths(artifact)) {
         if (field.startsWith('$context.') && field.includes('[*]')) {
-          errors.push(`${repoRel}: $context paths cannot contain [*] in Spec 1.0.0-rc.5`);
+          errors.push(`${repoRel}: $context paths cannot contain [*] in Spec 1.0.0-rc.7`);
         }
-      }
-      if (artifact.operator === 'not_empty' && typeof artifact.field === 'string' && artifact.field.includes('[*]')) {
-        warnings.push(`${repoRel}: not_empty with [*] checks only existing structural matches; it does not require the member in every collection item`);
       }
       const code = artifact.issue?.code;
       if (typeof code === 'string' && code.length > 0) {
@@ -152,6 +152,16 @@ if (project) {
     if (!hasDescription(catalog, 'operators', operator)) {
       warnings.push(`custom operator ${operator} needs business-facing authoring metadata`);
     }
+  }
+  const operatorPacks = manifest.operatorPacks?.node;
+  if (operatorPacks !== undefined &&
+      (!Array.isArray(operatorPacks) || operatorPacks.some((item) => typeof item !== 'string' || item.length === 0))) {
+    errors.push('manifest.operatorPacks.node must be an array of non-empty module specifiers');
+  } else if (Array.isArray(operatorPacks) && new Set(operatorPacks).size !== operatorPacks.length) {
+    errors.push('manifest.operatorPacks.node contains duplicates');
+  }
+  if (customOperators.size > 0 && (!Array.isArray(operatorPacks) || operatorPacks.length === 0)) {
+    errors.push('custom operators are used but manifest.operatorPacks.node declares no v4 operator pack');
   }
 
   const sampleFiles = walkFiles(project.samplesDir, (file) => file.endsWith('.json'));
@@ -206,3 +216,53 @@ process.exitCode = finish({
   strict: options.strict,
   successMessage: 'manifest and authoring coverage audit OK'
 });
+
+function checkPackageCompatibility(projectRoot, targetErrors, targetWarnings) {
+  const packageFile = path.join(projectRoot, 'package.json');
+  if (!exists(packageFile)) {
+    targetErrors.push('package.json is required for a Rules v4 authoring project');
+    return;
+  }
+  const packageJson = readJson(packageFile, targetErrors, projectRoot);
+  if (!packageJson) return;
+
+  checkDeclaredMajor(packageJson.dependencies?.['@jsonspecs/rules'], '@jsonspecs/rules', 4, targetErrors, targetWarnings);
+  const cliRange = packageJson.devDependencies?.['jsonspecs-cli'] ?? packageJson.dependencies?.['jsonspecs-cli'];
+  checkDeclaredMajor(cliRange, 'jsonspecs-cli', 4, targetErrors, targetWarnings);
+  if (typeof packageJson.engines?.node !== 'string' || packageJson.engines.node.length === 0) {
+    targetWarnings.push('package.json engines.node should declare the Node.js 20+ runtime boundary');
+  }
+
+  const lockFile = path.join(projectRoot, 'package-lock.json');
+  if (!exists(lockFile)) {
+    targetErrors.push('package-lock.json is required to pin Rules v4 and CLI v4 exactly');
+    return;
+  }
+  const lock = readJson(lockFile, targetErrors, projectRoot);
+  if (!lock) return;
+  for (const name of ['@jsonspecs/rules', 'jsonspecs-cli']) {
+    const installed = lock.packages?.[`node_modules/${name}`]?.version ?? lock.dependencies?.[name]?.version;
+    if (majorOf(installed) !== 4) {
+      targetErrors.push(`package-lock.json must pin ${name} major 4, got ${String(installed)}`);
+    }
+  }
+}
+
+function checkDeclaredMajor(range, name, expected, targetErrors, targetWarnings) {
+  if (typeof range !== 'string' || range.length === 0) {
+    targetErrors.push(`package.json must declare ${name}`);
+    return;
+  }
+  const major = majorOf(range);
+  if (major === null) {
+    targetWarnings.push(`cannot prove ${name} major ${expected} from dependency specifier ${range}`);
+  } else if (major !== expected) {
+    targetErrors.push(`package.json must target ${name} major ${expected}, got ${range}`);
+  }
+}
+
+function majorOf(value) {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/(?:^|[^0-9])(\d+)\.(?:\d+)\.(?:\d+)/);
+  return match ? Number.parseInt(match[1], 10) : null;
+}

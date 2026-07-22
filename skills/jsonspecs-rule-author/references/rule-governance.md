@@ -53,4 +53,4 @@ To answer which exact deployment made a decision, the host audit record should j
 - operator-pack id, version, and digest;
 - input/audit correlation identifiers allowed by policy.
 
-Keep trace and deployment records outside the closed RC.5 result.
+Keep trace and deployment records outside the closed RC.7 result.

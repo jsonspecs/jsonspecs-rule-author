@@ -5,7 +5,7 @@ reach consumers.
 
 ## Embedded runtime
 
-The application installs the published `@jsonspecs/rules` v3 package from npm and
+The application installs the published `@jsonspecs/rules` v4 package from npm and
 bundles it with the snapshot and operator registry. Use a lockfile to record the exact
 runtime release used by the deployment.
 
@@ -25,7 +25,7 @@ Do not let a broad dependency range silently change blocking behavior.
 A service owns compilation, deployment, execution, authentication, and audit logging.
 Use it when several languages or teams need a central rules contract.
 
-The service API is separate from the RC.5 runtime result. Define transport errors,
+The service API is separate from the RC.7 runtime result. Define transport errors,
 timeouts, retries, authorization, request limits, and version negotiation in the service
 contract rather than adding fields to the snapshot or result.
 

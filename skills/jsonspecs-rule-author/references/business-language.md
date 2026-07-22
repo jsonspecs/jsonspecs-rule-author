@@ -1,6 +1,6 @@
 # Business Language
 
-Use this reference when writing field titles, artifact titles, descriptions, messages, and Studio-facing labels.
+Use this reference when writing field titles, artifact titles, descriptions, messages, and Sandbox-facing labels.
 
 ## Write for reviewers, not implementers
 
@@ -37,7 +37,7 @@ Use `description` to explain scope:
 }
 ```
 
-Do not rely on `description` to compensate for unclear ids. Conditions and predicates also appear in Studio, so give them clear catalog titles.
+Do not rely on `description` to compensate for unclear ids. Conditions and predicates also appear in Sandbox, so give them clear catalog titles.
 
 ## Messages
 
@@ -53,5 +53,4 @@ Do not expose implementation details unless the business user needs them. A rege
 
 Use the product vocabulary. If the product says `эл. почта`, use that instead of a longer formal phrase.
 
-Keep terms consistent across fields, rules, samples, docs, and Studio metadata.
-
+Keep terms consistent across fields, rules, samples, docs, and Sandbox metadata.

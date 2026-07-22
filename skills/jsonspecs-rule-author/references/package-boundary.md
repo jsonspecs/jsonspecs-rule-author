@@ -7,8 +7,7 @@ Use this reference for reusable rules packages and their public contract.
 - `manifest.json`: authoring identity, paths, exports, and catalog.
 - `rules/`: source artifacts carrying source-level ids.
 - `samples/`: executable calls and expected result projections.
-- `operators/`: flat v3 operator registries, if needed.
-- a host-boundary module for structural invariants Rules v3 cannot express, if needed;
+- `operators/`: flat v4 operator registries, if needed.
 - `dist/snapshot.json`: closed formatVersion 2 executable snapshot.
 - `dist/build-info.json`: non-normative deployment metadata.
 
@@ -25,14 +24,6 @@ Treat snapshot `exports` as the callable API. Publish for each exported pipeline
 Internal pipelines, conditions, predicate rules, source folders, and catalog ids are not
 callable unless listed in `exports`.
 
-## Host-boundary checks
-
-Do not publish a payload requirement that is enforced only by prose. When collection
-shape or another invariant cannot be expressed by RC.5, keep a small executable module
-with the package. The service example must invoke it before `runPipeline`, and the main
-test command must cover each required member, wrong collection shape, and wrong item
-shape. Keep these host errors separate from the closed Rules v3 result contract.
-
 ## Versioning
 
 Classify by consumer impact:
@@ -48,21 +39,21 @@ snapshot changes. Verify the built data rather than assuming a refactor is neutr
 
 ## Reproducibility
 
-Build information should record at least:
+CLI v4 `build-info.json` records:
 
-- package id and semantic version;
-- `specVersion` and snapshot `sourceHash`;
-- exported pipeline ids;
-- `@jsonspecs/rules` version used for compilation;
-- requested dependency range plus the lockfile's exact registry URL and integrity hash;
-- operator-pack id, version, and immutable digest;
-- source revision and build environment identity when required by governance.
+- project id, title, and semantic version;
+- `@jsonspecs/rules` package name and version;
+- ISO build time, `specVersion`, and snapshot `sourceHash`;
+- exported pipeline ids, artifact count, warning count, and diagnostic count;
+- each operator-pack specifier, id, version, and immutable `sha256:` digest;
+- the sorted custom operator names.
+
+Keep the requested dependency range, exact registry resolution, and integrity hash in
+`package.json` plus the lockfile. Keep source revision and build environment identity in
+release or deployment records when governance requires them.
 
 Do not add these fields to the closed snapshot or normative runtime `ruleset` object.
 
-The bundled dynamic verifier checks the derived fields it can reproduce:
-`project.id`, `project.version`, `runtime.package`, `runtime.version`, `specVersion`,
-`sourceHash`, `exports`, `artifactCount`, and the sorted custom operator names. It does
-not prove the identity or digest of an operator-pack distribution from a local module
-path. Record and verify that package identity in the build or deployment system when it
-is part of the release contract.
+The bundled dynamic verifier checks the reproducible field values, timestamp shape,
+counts, operator-pack specifiers, and digest shape. CLI v4 remains the authority for
+computing operator-pack digests and writing `build-info.json`.

@@ -1,4 +1,4 @@
-# Rules v3 and Spec 1.0.0-rc.5 contract
+# Rules v4 and Spec 1.0.0-rc.7 contract
 
 Use this reference as the compatibility baseline. It summarizes the executable
 contract. Project layout, manifest shape, catalog fields, and build information are
@@ -6,14 +6,43 @@ authoring conventions, not fields defined by the behavior specification.
 
 ## Contents
 
+- [Strict JSON boundary](#strict-json-boundary)
+- [Migration from Rules v3 and RC.5](#migration-from-rules-v3-and-rc5)
 - [Snapshot boundary](#snapshot-boundary)
 - [Artifact forms](#artifact-forms)
 - [Rule and issue semantics](#rule-and-issue-semantics)
 - [Wildcards](#wildcards)
-- [Collection structural-check boundaries](#collection-structural-check-boundaries)
+- [Collection structural checks](#collection-structural-checks)
+- [Exact index tokens](#exact-index-tokens)
 - [Built-in operators](#built-in-operators)
 - [Custom operator boundary](#custom-operator-boundary)
 - [Runtime boundary](#runtime-boundary)
+
+## Strict JSON boundary
+
+Snapshots, payloads, context, authoring files, samples, and Sandbox requests must cross
+an I-JSON boundary before ordinary host objects can erase transport violations. Reject
+duplicate object members, unpaired UTF-16 surrogates, malformed UTF-8, non-finite or
+overflowing binary64 numbers, invalid object keys, sparse arrays, and excessive depth as
+specified. Use CLI v4 for authoring files and samples. Use `compileSnapshotText` when a
+runtime receives raw snapshot text.
+
+## Migration from Rules v3 and RC.5
+
+When moving an authoring package to Rules v4 and RC.7:
+
+1. pin Rules v4 and CLI v4 through `package.json` plus the lockfile;
+2. set `manifest.specVersion` to `1.0.0-rc.7`;
+3. rebuild the entire snapshot and recompute `sourceHash`; changing only the version
+   still changes snapshot identity;
+4. rerun every wildcard sample because RC.7 includes the incompatible structural
+   candidate semantics introduced in RC.6;
+5. replace application-side missing-child checks with authored wildcard presence rules
+   when the rule layer owns that business requirement;
+6. test omitted members, concrete `EACH` issue paths, empty collections, nested
+   wildcards, and large exact index tokens;
+7. let CLI v4 be the sole writer of canonical `dist` files and use any project-local
+   builder only as a read-only independent comparison.
 
 ## Snapshot boundary
 
@@ -23,7 +52,7 @@ The executable snapshot is closed:
 {
   "format": "jsonspecs-snapshot",
   "formatVersion": 2,
-  "specVersion": "1.0.0-rc.5",
+  "specVersion": "1.0.0-rc.7",
   "sourceHash": "<64 lowercase hex>",
   "exports": ["entrypoints.order.validate"],
   "artifacts": {
@@ -110,34 +139,64 @@ A wildcard `field` requires `aggregate`; `aggregate` is forbidden without `[*]`.
   forbidden for predicate-only rules and `COUNT`.
 - `COUNT` uses optional `op` (default `>=`) and required non-negative integer `value`.
 
-`ALL`, `ANY`, and `COUNT` evaluate every structural match; they do not short-circuit.
+`ALL`, `ANY`, and `COUNT` evaluate every structural candidate; they do not short-circuit.
 `SKIP` values leave the effective population. `when` expressions do short-circuit from
 left to right.
 
-## Collection structural-check boundaries
+## Collection structural checks
 
-RC.5 resolves paths against a flattened structural map. Scalars, `null`, empty objects,
-and empty arrays are leaves. A non-empty object or array has no path of its own in that
-map; only its descendant leaves exist.
+RC.7 expands each `[*]` from real arrays in the nested payload. Every reached array
+index creates a structural candidate. After the final wildcard, a missing or impassable
+exact suffix remains one absent candidate with a concrete path. Therefore this rule can
+require `sku` in every existing item:
 
-Consequences for collection checks:
+```json
+{
+  "type": "rule",
+  "operator": "not_empty",
+  "field": "order.items[*].sku",
+  "aggregate": {
+    "mode": "ALL",
+    "issueMode": "EACH",
+    "onEmpty": "FAIL"
+  },
+  "issue": {
+    "level": "ERROR",
+    "code": "ORDER.ITEM.SKU.REQUIRED",
+    "message": "Укажите артикул товара"
+  }
+}
+```
 
-- `items[*].sku` matches only `sku` leaves that actually exist. A `not_empty` rule on
-  that path cannot detect that one item omits `sku` while another item has it.
-- `aggregate.onEmpty` applies only when the wildcard expression has zero total
-  structural matches. It does not detect a missing member in part of a collection.
-- Named `inputs`, `value_field`, and `$context.*` paths cannot contain `[*]`.
-- An element-aligned comparison such as `items[*].returnQty` against
-  `items[*].purchasedQty` is not defined in RC.5. Use a custom operator over a supported
-  non-wildcard input shape or validate the aligned relationship outside this layer.
+An item without `sku` produces a concrete issue field such as
+`order.items[1].sku`. Keep these distinctions:
 
-When every collection item must contain a member, do not present wildcard `not_empty`
-as proof of that invariant. Model a supported count/value rule when possible, use a
-custom operator with explicit JSON-safe behavior, or enforce the invariant at the host
-boundary. If the host boundary is chosen, include the executable module in the package,
-call it before `runPipeline` in service examples, and test omission of every required
-member. Documentation that merely assigns the check to an absent adapter is not an
-implementation.
+- an empty, absent, wrong-type, or otherwise unreachable collection creates no
+  candidates, so `onEmpty` applies;
+- an absent child after the final wildcard is a candidate; presence operators observe
+  it, while value operators return `SKIP`;
+- an impassable branch before a later wildcard creates no branch because there is no
+  real next array from which to enumerate indices;
+- `matched` counts present and absent structural candidates, `evaluated` counts
+  `PASS`/`FAIL`, and `skipped` counts `SKIP`;
+- a path ending in `[*]` still uses the flattened-leaf model: a non-empty object or
+  array is not exposed as a value merely because the wildcard reached it;
+- named `inputs`, `value_field`, and `$context.*` paths cannot contain `[*]`;
+- element-aligned comparison between two wildcard paths is not defined.
+
+Sample empty collections, missing members, `null`, empty values, all-pass, mixed,
+all-fail, and all-skip populations according to the authored aggregate semantics.
+
+## Exact index tokens
+
+An exact index token such as `[9007199254740993]` is decimal path syntax, not a JSON
+number. It has no implementation-sized upper bound. Range-check it exactly and preserve
+the authored digits in a concrete issue path. Do not convert it through JavaScript
+`Number`, Java `double`, or a limited integer type that can round it.
+
+Exact keys and indices are type-sensitive: a key traverses an own JSON-object member;
+an index traverses only an in-range JSON-array element. An object key named `"0"` is not
+the same as array index `[0]`.
 
 ## Built-in operators
 
@@ -154,7 +213,7 @@ Cross-field: `field_equals_field`, `field_not_equals_field`,
 
 Dictionaries: `in_dictionary`, `not_in_dictionary`.
 
-Regular expressions use the portable RC.5 subset. Do not add `flags` or rely on host
+Regular expressions use the portable RC.7 subset. Do not add `flags` or rely on host
 JavaScript regular-expression extensions.
 
 ## Custom operator boundary
@@ -202,7 +261,7 @@ rule use site.
 
 ## Runtime boundary
 
-Compile and execute with the v3 API:
+Compile and execute with the v4 API:
 
 ```js
 const rules = require("@jsonspecs/rules");

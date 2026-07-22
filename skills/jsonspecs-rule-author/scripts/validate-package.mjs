@@ -8,6 +8,7 @@ import {
   createSnapshot,
   exists,
   finish,
+  loadCli,
   loadOperatorRegistry,
   loadProject,
   loadRuntime,
@@ -64,6 +65,7 @@ function runDynamicValidation() {
 if (project && projectErrors.length === 0) {
   try {
     const runtime = loadRuntime(project);
+    const cli = loadCli(project, runtime);
     const operators = loadOperatorRegistry(project, runtime);
     const snapshot = createSnapshot(project, runtime);
     const engine = runtime.createEngine({ operators });
@@ -71,10 +73,14 @@ if (project && projectErrors.length === 0) {
     const inspector = engine.inspect(prepared);
 
     notes.push(`@jsonspecs/rules: ${runtime.version}`);
+    notes.push(`jsonspecs-cli: ${cli.version}`);
     notes.push(`specVersion: ${snapshot.specVersion}`);
     notes.push(`sourceHash: ${snapshot.sourceHash}`);
     notes.push(`compiled artifacts: ${inspector.stats().artifacts}`);
     notes.push(`custom operators loaded: ${Object.keys(operators).length}`);
+
+    const cliValidation = runCliCheck(cli, 'validate', ['--fail-on-warning']);
+    runCliCheck(cli, 'test');
 
     let sampleCount = 0;
     for (const file of walkFiles(project.samplesDir, (candidate) => candidate.endsWith('.json'))) {
@@ -103,15 +109,11 @@ if (project && projectErrors.length === 0) {
         errors.push(`${label}: expected status ${String(sample.expect.status)}, got ${actual.status}`);
       }
       const expectedIssues = Array.isArray(sample.expect.issues) ? sample.expect.issues : [];
-      if (expectedIssues.length !== actual.issues.length) {
-        errors.push(`${label}: expected ${expectedIssues.length} issues, got ${actual.issues.length}`);
+      for (const message of matchExpectedIssues(expectedIssues, actual.issues)) {
+        errors.push(`${label}: ${message}`);
       }
-      for (let index = 0; index < Math.min(expectedIssues.length, actual.issues.length); index += 1) {
-        const expected = expectedIssues[index];
-        const got = actual.issues[index];
-        if (!isObjectSubset(expected, got)) {
-          errors.push(`${label}: issue ${index} does not match expected projection ${JSON.stringify(expected)}; got ${JSON.stringify(got)}`);
-        }
+      if (sample.expect.exact === true && expectedIssues.length !== actual.issues.length) {
+        errors.push(`${label}: expected exactly ${expectedIssues.length} issues, got ${actual.issues.length}`);
       }
       if (sample.expect.error !== undefined && !isObjectSubset(sample.expect.error, actual.error)) {
         errors.push(`${label}: runtime error does not match expected projection`);
@@ -129,7 +131,7 @@ if (project && projectErrors.length === 0) {
       const checkedIn = readJson(distSnapshotFile, distErrors, root);
       errors.push(...distErrors.map((message) => `dist: ${message}`));
       if (checkedIn && !isDeepStrictEqual(checkedIn, snapshot)) {
-        errors.push(`${relative(root, distSnapshotFile)} is stale or differs from the in-memory Rules v3 build`);
+        errors.push(`${relative(root, distSnapshotFile)} is stale or differs from the in-memory Rules v4 build`);
       } else if (checkedIn) {
         notes.push(`${relative(root, distSnapshotFile)} matches the in-memory build`);
       }
@@ -146,6 +148,7 @@ if (project && projectErrors.length === 0) {
       if (info) {
         const label = relative(root, buildInfoFile);
         checkBuildInfo(errors, label, 'project.id', info.project?.id, project.manifest.project?.id);
+        checkBuildInfo(errors, label, 'project.title', info.project?.title, project.manifest.project?.title);
         checkBuildInfo(errors, label, 'project.version', info.project?.version, project.manifest.project?.version);
         checkBuildInfo(errors, label, 'runtime.package', info.runtime?.package, '@jsonspecs/rules');
         checkBuildInfo(errors, label, 'runtime.version', info.runtime?.version, runtime.version);
@@ -153,7 +156,10 @@ if (project && projectErrors.length === 0) {
         checkBuildInfo(errors, label, 'sourceHash', info.sourceHash, snapshot.sourceHash);
         checkBuildInfo(errors, label, 'exports', info.exports, snapshot.exports);
         checkBuildInfo(errors, label, 'artifactCount', info.artifactCount, Object.keys(snapshot.artifacts).length);
+        checkBuildInfo(errors, label, 'warningCount', info.warningCount, cliValidation.warningCount);
+        checkBuildInfo(errors, label, 'diagnosticCount', info.diagnosticCount, cliValidation.diagnosticCount);
         checkBuildInfo(errors, label, 'operators', info.operators, Object.keys(operators).sort());
+        checkBuildInfoShape(errors, label, info, project);
       }
     } else {
       warnings.push(`${relative(root, buildInfoFile)} is missing; build identity was not verified`);
@@ -162,7 +168,7 @@ if (project && projectErrors.length === 0) {
     const diagnostics = Array.isArray(cause?.diagnostics)
       ? `: ${cause.diagnostics.map((item) => `${item.code}${item.artifactId ? `(${item.artifactId})` : ''}`).join(', ')}`
       : '';
-    errors.push(`Rules v3 compilation failed: ${cause.message}${diagnostics}`);
+    errors.push(`Rules v4 validation failed: ${cause.message}${diagnostics}`);
   }
 }
 }
@@ -175,13 +181,55 @@ process.exitCode = finish({
   notes,
   json: options.json,
   strict: options.strict,
-  successMessage: 'jsonspecs Rules v3 package validation OK'
+  successMessage: 'jsonspecs Rules v4 package validation OK'
 });
+
+function runCliCheck(cli, command, args = []) {
+  const result = spawnSync(process.execPath, [cli.bin, command, '--json', ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024
+  });
+  let report;
+  try {
+    report = JSON.parse(result.stdout);
+  } catch {
+    throw new Error(`jsonspecs ${command} did not return JSON${result.stderr ? `: ${result.stderr.trim()}` : ''}`);
+  }
+  if (result.status !== 0 || report.ok !== true) {
+    const details = cliFailureDetails(report);
+    throw new Error(`jsonspecs ${command} failed${details ? `: ${details}` : ''}`);
+  }
+  notes.push(`jsonspecs ${command}: OK`);
+  return report;
+}
+
+function cliFailureDetails(report) {
+  if (Array.isArray(report.diagnostics) && report.diagnostics.length > 0) {
+    return report.diagnostics.slice(0, 20).map((item) => item.message || item.code || JSON.stringify(item)).join('; ');
+  }
+  if (Array.isArray(report.results)) {
+    return report.results.filter((item) => !item.ok).slice(0, 20)
+      .flatMap((item) => (item.failures || []).map((failure) => `${item.file}: ${failure}`)).join('; ');
+  }
+  return '';
+}
 
 function isObjectSubset(expected, actual) {
   if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return isDeepStrictEqual(expected, actual);
   if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return false;
   return Object.entries(expected).every(([key, value]) => isDeepStrictEqual(actual[key], value));
+}
+
+function matchExpectedIssues(expectedIssues, actualIssues) {
+  const remaining = [...actualIssues];
+  const failures = [];
+  for (const expected of expectedIssues) {
+    const index = remaining.findIndex((actual) => isObjectSubset(expected, actual));
+    if (index < 0) failures.push(`missing issue ${JSON.stringify(expected)}`);
+    else remaining.splice(index, 1);
+  }
+  return failures;
 }
 
 function appendAuditMessages(target, script, messages, limit = 100) {
@@ -194,5 +242,68 @@ function checkBuildInfo(target, label, field, actual, expected) {
     target.push(`${label}: required derived field ${field} is missing`);
   } else if (!isDeepStrictEqual(actual, expected)) {
     target.push(`${label}: ${field} does not match the current project build`);
+  }
+}
+
+function checkBuildInfoShape(target, label, info, project) {
+  checkExactKeys(target, label, info, [
+    'project',
+    'runtime',
+    'builtAt',
+    'specVersion',
+    'sourceHash',
+    'exports',
+    'artifactCount',
+    'warningCount',
+    'diagnosticCount',
+    'operatorPacks',
+    'operators'
+  ]);
+  checkExactKeys(target, `${label}.project`, info.project, ['id', 'title', 'version']);
+  checkExactKeys(target, `${label}.runtime`, info.runtime, ['package', 'version']);
+  if (typeof info.builtAt !== 'string' || Number.isNaN(Date.parse(info.builtAt)) ||
+      new Date(info.builtAt).toISOString() !== info.builtAt) {
+    target.push(`${label}: builtAt must be an ISO timestamp`);
+  }
+  for (const field of ['warningCount', 'diagnosticCount']) {
+    if (!Number.isInteger(info[field]) || info[field] < 0) {
+      target.push(`${label}: ${field} must be a non-negative integer`);
+    }
+  }
+  const packs = info.operatorPacks;
+  if (!Array.isArray(packs)) {
+    target.push(`${label}: operatorPacks must be an array`);
+    return;
+  }
+  const expectedSpecifiers = Array.isArray(project.manifest.operatorPacks?.node)
+    ? project.manifest.operatorPacks.node
+    : [];
+  checkBuildInfo(target, label, 'operatorPacks specifiers', packs.map((pack) => pack?.specifier), expectedSpecifiers);
+  for (const [index, pack] of packs.entries()) {
+    if (!pack || typeof pack !== 'object' || Array.isArray(pack)) {
+      target.push(`${label}: operatorPacks[${index}] must be an object`);
+      continue;
+    }
+    checkExactKeys(target, `${label}.operatorPacks[${index}]`, pack, ['specifier', 'id', 'version', 'digest']);
+    for (const field of ['specifier', 'id', 'version']) {
+      if (typeof pack[field] !== 'string' || pack[field].length === 0) {
+        target.push(`${label}: operatorPacks[${index}].${field} must be a non-empty string`);
+      }
+    }
+    if (typeof pack.digest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(pack.digest)) {
+      target.push(`${label}: operatorPacks[${index}].digest must be sha256:<64 lowercase hex>`);
+    }
+  }
+}
+
+function checkExactKeys(target, label, value, expected) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    target.push(`${label} must be an object`);
+    return;
+  }
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (!isDeepStrictEqual(actual, wanted)) {
+    target.push(`${label} fields do not match the CLI v4 build-info contract`);
   }
 }

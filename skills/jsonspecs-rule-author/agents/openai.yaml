@@ -1,6 +1,6 @@
 interface:
   display_name: "jsonspecs Rule Author"
-  short_description: "Build and migrate jsonspecs Rules v3 packages"
-  default_prompt: "Use $jsonspecs-rule-author to author, migrate, or validate a Rules v3 package for Spec 1.0.0-rc.5."
+  short_description: "Build and migrate jsonspecs Rules v4 packages"
+  default_prompt: "Use $jsonspecs-rule-author to author, migrate, or validate a Rules v4 package with CLI v4 for Spec 1.0.0-rc.7."
 policy:
   allow_implicit_invocation: true

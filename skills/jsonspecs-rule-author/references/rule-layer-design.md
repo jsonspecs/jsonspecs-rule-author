@@ -27,11 +27,11 @@ output = status + issues + ruleset + error only on ABORT
 ```
 
 `$context.*` paths resolve against the separate `context` object. The special
-`payload.__context` convention does not exist in RC.5.
+`payload.__context` convention does not exist in RC.7.
 
-The snapshot cannot declare `required_context`. If missing context is a business error,
-add an ordinary presence rule such as `not_empty` on `$context.currentDate` and place it
-before dependent checks. Document the context contract in the catalog or project docs.
+The snapshot cannot declare `required_context`. The analyst adds an ordinary presence
+rule such as `not_empty` on every required `$context.*` path and places it before
+dependent checks. Document the context contract in the catalog or project docs.
 
 ## Status boundary
 
@@ -49,7 +49,7 @@ non-normative interface.
 
 - Which business scenario does each exported pipeline validate?
 - Which input and context paths form its contract?
-- Which missing context values are business issues rather than caller errors?
+- Which payload and context values are required, and which issue level should each use?
 - Which issue levels are blocking, advisory, or immediate business stops?
 - Which values are versioned dictionaries?
 - Which checks need custom domain code after built-ins are exhausted?

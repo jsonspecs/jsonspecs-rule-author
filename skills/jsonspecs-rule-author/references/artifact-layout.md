@@ -38,7 +38,7 @@ The builder must lower it to an `artifacts` map and remove `id` from the value:
 }
 ```
 
-The source `id` convention is not part of Spec 1.0.0-rc.5. If a project authors the
+The source `id` convention is not part of Spec 1.0.0-rc.7. If a project authors the
 snapshot map directly, preserve that project convention instead.
 
 ## Recommended source layout
@@ -64,7 +64,7 @@ dist/build-info.json
 - `rules/library/`: artifacts with demonstrated reuse and the same business meaning.
 - `rules/library/dictionaries/`: shared dictionaries. A scenario-only dictionary may
   remain under its entrypoint directory.
-- `operators/node/`: project-local v3 operator registry when needed.
+- `operators/node/`: project-local v4 operator registry when needed.
 - `samples/`: complete calls with top-level `pipelineId`, `payload`, optional `context`,
   and `expect`.
 
@@ -73,7 +73,7 @@ and build diagnostics unambiguous.
 
 ## Id policy
 
-Spec 1.0.0-rc.5 treats ids as opaque strings. Prefixes have no runtime meaning. The
+Spec 1.0.0-rc.7 treats ids as opaque strings. Prefixes have no runtime meaning. The
 following naming scheme is an authoring recommendation:
 
 ```text
@@ -116,7 +116,7 @@ Before compilation, the builder must:
 2. remove only source-level `id` from artifact values;
 3. keep artifact schemas closed rather than silently dropping unknown fields;
 4. copy the already sorted, unique manifest `exports` into the snapshot;
-5. set `formatVersion: 2` and `specVersion: "1.0.0-rc.5"`;
+5. set `formatVersion: 2` and `specVersion: "1.0.0-rc.7"`;
 6. compute `sourceHash` over the whole snapshot without `sourceHash`;
 7. call `compileSnapshot` with the exact deployed operator registry;
 8. reject unreachable artifacts instead of pruning them silently.

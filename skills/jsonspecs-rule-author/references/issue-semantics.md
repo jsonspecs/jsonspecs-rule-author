@@ -1,4 +1,4 @@
-# Issue semantics for RC.5
+# Issue semantics for RC.7
 
 Use this reference for issue codes, fields, messages, aggregates, and multi-field rules.
 
