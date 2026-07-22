@@ -45,6 +45,7 @@ Build information should record at least:
 - `specVersion` and snapshot `sourceHash`;
 - exported pipeline ids;
 - `@jsonspecs/rules` version used for compilation;
+- requested dependency range plus the lockfile's exact registry URL and integrity hash;
 - operator-pack id, version, and immutable digest;
 - source revision and build environment identity when required by governance.
 

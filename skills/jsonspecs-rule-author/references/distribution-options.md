@@ -5,7 +5,9 @@ reach consumers.
 
 ## Embedded runtime
 
-The application bundles `@jsonspecs/rules`, the snapshot, and operator registry.
+The application installs the published `@jsonspecs/rules` v3 package from npm and
+bundles it with the snapshot and operator registry. Use a lockfile to record the exact
+runtime release used by the deployment.
 
 Use it for low latency and a single deployment owner. The application release must pin
 all three parts and log their versions or digests.
