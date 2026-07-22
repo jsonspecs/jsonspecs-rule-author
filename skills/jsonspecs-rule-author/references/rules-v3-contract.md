@@ -134,7 +134,10 @@ Consequences for collection checks:
 When every collection item must contain a member, do not present wildcard `not_empty`
 as proof of that invariant. Model a supported count/value rule when possible, use a
 custom operator with explicit JSON-safe behavior, or enforce the invariant at the host
-boundary.
+boundary. If the host boundary is chosen, include the executable module in the package,
+call it before `runPipeline` in service examples, and test omission of every required
+member. Documentation that merely assigns the check to an absent adapter is not an
+implementation.
 
 ## Built-in operators
 

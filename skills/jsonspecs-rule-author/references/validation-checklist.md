@@ -50,6 +50,8 @@ Spec `1.0.0-rc.5`.
   identity outside the snapshot.
 - Derived `build-info.json` fields match the current manifest, runtime, snapshot,
   artifact count, exports, and custom operator names.
+- Every documented check outside Rules v3 has an executable, versioned module; service
+  examples invoke it before `runPipeline`.
 
 ## Rules and issues
 
@@ -100,6 +102,10 @@ Spec `1.0.0-rc.5`.
 - Applicable boundary classes cover absence, `null`, empty strings, wrong types,
   unsupported dictionary values and branches, and empty/mixed collections.
 - Wildcard and custom-operator edge cases are present.
+- Removing all required `context` from an otherwise valid sample cannot return `OK` for
+  any export that depends on it.
+- Host-boundary collection tests remove every required item member independently and
+  cover wrong collection and item shapes.
 
 ## Commands
 
@@ -119,6 +125,10 @@ project code. Neither mode downloads packages or writes build output.
 
 Run the project's own build command afterward when distribution files need updating,
 then rerun the verifier to prove that `dist/snapshot.json` is current.
+
+Require the repository's continuous-integration job to install from the lockfile,
+validate the package, and run its complete test command on every proposed change. The
+test command must include samples, custom operators, and host-boundary modules.
 
 Use Studio only when the selected Studio release explicitly supports formatVersion 2.
 Check export pages, field labels, condition trees, flow links, and sample execution.

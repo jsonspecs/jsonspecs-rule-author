@@ -8,6 +8,7 @@ Use this reference for reusable rules packages and their public contract.
 - `rules/`: source artifacts carrying source-level ids.
 - `samples/`: executable calls and expected result projections.
 - `operators/`: flat v3 operator registries, if needed.
+- a host-boundary module for structural invariants Rules v3 cannot express, if needed;
 - `dist/snapshot.json`: closed formatVersion 2 executable snapshot.
 - `dist/build-info.json`: non-normative deployment metadata.
 
@@ -23,6 +24,14 @@ Treat snapshot `exports` as the callable API. Publish for each exported pipeline
 
 Internal pipelines, conditions, predicate rules, source folders, and catalog ids are not
 callable unless listed in `exports`.
+
+## Host-boundary checks
+
+Do not publish a payload requirement that is enforced only by prose. When collection
+shape or another invariant cannot be expressed by RC.5, keep a small executable module
+with the package. The service example must invoke it before `runPipeline`, and the main
+test command must cover each required member, wrong collection shape, and wrong item
+shape. Keep these host errors separate from the closed Rules v3 result contract.
 
 ## Versioning
 

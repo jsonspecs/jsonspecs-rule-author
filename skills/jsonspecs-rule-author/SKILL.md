@@ -49,10 +49,13 @@ Produce maintainable authoring projects whose executable output is a closed
    warnings and exceptions where applicable, branch edges, wildcard empty/mixed cases,
    malformed JSON-safe inputs for custom operators, and every reachable issue code or a
    documented exclusion with a reason.
-10. Build the snapshot in memory, compute `sourceHash` over the whole snapshot without
+10. When the contract needs checks outside Rules v3, ship an executable host-boundary
+    module, call it before `runPipeline` in the integration example, and test it together
+    with the rules package. Do not delegate a declared invariant to an imaginary adapter.
+11. Build the snapshot in memory, compute `sourceHash` over the whole snapshot without
     `sourceHash`, compile it with the deployed operator registry, run samples, and compare
     any checked-in `dist/snapshot.json` with the rebuilt value.
-11. Report boundary decisions, public exports, custom-operator rationale, validation
+12. Report boundary decisions, public exports, custom-operator rationale, validation
     commands, snapshot identity, and residual warnings.
 
 ## Reference routing
@@ -124,8 +127,12 @@ Neither mode downloads a CLI or writes `dist/`.
   intentional issue-code exclusion with a non-empty reason.
 - Required `$context.*` dependencies are enforced by rules when absence is a business
   error and documented outside the snapshot.
+- Every declared host-boundary check exists as executable, versioned code and is covered
+  by the same test command as the rules package.
 - Guard ordering prevents misleading dependent failures.
 - Custom operators use the v3 contract and have deterministic pass/fail/skip vectors.
 - The full graph is reachable, acyclic, and free of legacy fields.
 - A checked-in snapshot, if present, matches the in-memory rebuild byte-for-data after
   JSON parsing, including `sourceHash`.
+- The repository's continuous-integration job installs from the lockfile, validates the
+  package, and runs all samples and host-boundary tests on a supported Node.js version.
