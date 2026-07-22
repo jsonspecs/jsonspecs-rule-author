@@ -1,54 +1,56 @@
-# Rule Governance
+# Rule governance
 
-Use this reference when business rules are controlled by more than one team or affect external contracts.
+Use this reference when rules affect external contracts or are controlled by several
+teams.
 
 ## Ownership
 
-Every rule family should have:
+For every rule family, record outside the executable snapshot:
 
-- business owner;
-- technical owner;
-- source of truth for field contract;
-- review path for issue codes and messages;
-- release and rollback owner.
+- business owner and technical owner;
+- source of truth for input and context fields;
+- reviewer for issue codes, levels, fields, and messages;
+- dictionary owner and update process;
+- package and operator-pack release and rollback owners.
 
-## Review checklist
+## Change review
 
-Before release, verify:
+Review these as behavior or contract changes:
 
-- entrypoint matches a named business scenario;
-- input fields are documented;
-- required `$context` fields are explicit;
-- issue codes are stable and machine-readable;
-- messages are business-readable;
-- samples cover success, primary failures, and branch edge cases;
-- custom operators have rationale and malformed-input samples;
-- Studio labels are understandable without reading JSON;
-- generated snapshot is reproducible.
+- adding a blocking issue or an `EXCEPTION` stop;
+- changing issue code, field, level, order, or condition;
+- changing required payload or context values;
+- changing an export id;
+- changing dictionary eligibility;
+- changing custom-operator schema or outcome;
+- changing wildcard `onEmpty`, mode, or issue mode.
 
-## Change control
+Record the decision in the domain changelog or release notes. Do not infer approval from
+the existence of a sample or from a compiler accepting the snapshot.
 
-Treat these as contract changes:
+## Release evidence
 
-- adding a new blocking error;
-- changing an issue code or field;
-- changing required fields;
-- changing required `$context`;
-- changing status or control semantics;
-- changing dictionary values that affect eligibility.
+- every export maps to a named business scenario;
+- input and context contracts are documented;
+- samples cover success, failures, warnings, exceptions, and branch edges;
+- custom operators have rationale and golden vectors;
+- the rebuilt snapshot compiles and matches the checked-in distribution;
+- the full artifact graph is reachable and acyclic;
+- UI metadata is readable without opening JSON source.
 
-Record such changes in package release notes or a domain changelog.
+## Audit identity
 
-## Auditability
+The normative runtime result identifies only `specVersion` and snapshot `sourceHash` in
+`ruleset`, plus `pipelineId` on each issue. It does not identify package version,
+runtime version, source revision, or operator pack.
 
-Runtime results should identify:
+To answer which exact deployment made a decision, the host audit record should join:
 
-- package name and version;
-- snapshot/source hash;
-- entrypoint id;
-- operator pack version or digest;
-- issue codes and fields;
-- optional trace when needed for explanations.
+- package id and version;
+- snapshot `sourceHash`;
+- requested exported `pipelineId`;
+- runtime implementation and version;
+- operator-pack id, version, and digest;
+- input/audit correlation identifiers allowed by policy.
 
-This lets consumers answer: which exact rules produced this decision?
-
+Keep trace and deployment records outside the closed RC.5 result.

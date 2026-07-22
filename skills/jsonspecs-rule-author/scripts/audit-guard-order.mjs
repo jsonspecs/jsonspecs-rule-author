@@ -1,111 +1,110 @@
 #!/usr/bin/env node
-import fs from 'node:fs';
 import path from 'node:path';
+import {
+  BUILTIN_OPERATORS,
+  collectRulePaths,
+  compareUtf16,
+  finish,
+  loadProject,
+  parseOptions,
+  whenRefs
+} from './lib/project.mjs';
 
-const args = process.argv.slice(2);
-const options = {
-  json: args.includes('--json'),
-  strict: args.includes('--strict')
-};
-const rootArg = args.find((arg) => !arg.startsWith('--')) || '.';
-const root = path.resolve(process.cwd(), rootArg);
+const options = parseOptions();
+const root = path.resolve(process.cwd(), options.rootArg);
 const errors = [];
 const warnings = [];
 const notes = [];
-const dependentOperators = new Set([
+const project = loadProject(root, errors);
+const prerequisiteOperators = new Set([
   'matches_regex',
-  'valid_inn',
+  'not_matches_regex',
+  'is_boolean',
+  'is_string',
+  'is_number',
+  'is_integer',
   'in_dictionary',
+  'not_in_dictionary'
+]);
+const crossFieldOperators = new Set([
   'field_equals_field',
   'field_not_equals_field',
-  'field_less_than_field',
   'field_greater_than_field',
-  'field_less_or_equal_than_field',
-  'field_greater_or_equal_than_field'
+  'field_less_than_field',
+  'field_greater_or_equal_than_field',
+  'field_less_or_equal_than_field'
 ]);
 
-function exists(file) {
-  try {
-    fs.accessSync(file);
-    return true;
-  } catch {
-    return false;
-  }
+function primaryPaths(rule) {
+  return [rule?.field, rule?.value_field].filter((value) => typeof value === 'string');
 }
 
-function readJson(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (cause) {
-    errors.push(`${path.relative(root, file)}: cannot parse JSON: ${cause.message}`);
-    return null;
-  }
-}
+if (project) {
+  const contextPresence = new Set();
+  const contextValueUses = new Set();
+  let documentedHostContext = 0;
 
-function walkFiles(dir, predicate = () => true, ignoredNames = new Set(['.git', 'node_modules', 'dist'])) {
-  const out = [];
-  if (!exists(dir)) return out;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (ignoredNames.has(entry.name)) continue;
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...walkFiles(full, predicate, ignoredNames));
-    else if (entry.isFile() && predicate(full)) out.push(full);
-  }
-  return out;
-}
-
-function ruleField(rule) {
-  return rule?.field || (Array.isArray(rule?.fields) ? rule.fields.join('|') : null);
-}
-
-const manifest = readJson(path.join(root, 'manifest.json'));
-const rulesDir = path.resolve(root, manifest?.paths?.rules || './rules');
-const artifacts = new Map();
-
-for (const file of walkFiles(rulesDir, (candidate) => candidate.endsWith('.json'))) {
-  const parsed = readJson(file);
-  const list = Array.isArray(parsed) ? parsed : [parsed];
-  for (const artifact of list) {
-    if (artifact?.id) artifacts.set(artifact.id, artifact);
-  }
-}
-
-for (const [id, artifact] of artifacts) {
-  const steps = artifact.flow || artifact.steps;
-  if (!Array.isArray(steps)) continue;
-  const hasConditionGuard = artifact.when !== undefined && artifact.when !== null;
-  const directRequiredFields = new Set();
-  for (const step of steps) {
-    if (step.condition || step.pipeline) continue;
-    if (!step.rule) continue;
-    const rule = artifacts.get(step.rule);
-    if (!rule || rule.type !== 'rule') continue;
-    const field = ruleField(rule);
-    if (rule.operator === 'not_empty' && field) {
-      directRequiredFields.add(field);
-      continue;
-    }
-    if (!dependentOperators.has(rule.operator)) continue;
-    if (!field) continue;
-    if (directRequiredFields.has(field)) {
-      warnings.push(`${id}: ${step.rule} runs directly after required check for ${field}; consider if_present/format guard condition`);
-      continue;
-    }
-    if (rule.operator.startsWith('field_') && !hasConditionGuard) {
-      warnings.push(`${id}: ${step.rule} is a direct cross-field comparison; consider format/presence guard predicates`);
+  for (const { artifact } of project.records) {
+    if (artifact.type !== 'rule') continue;
+    for (const field of collectRulePaths(artifact)) {
+      if (!field.startsWith('$context.')) continue;
+      if (artifact.operator === 'not_empty' && artifact.field === field) contextPresence.add(field);
+      else contextValueUses.add(field);
     }
   }
+
+  for (const field of [...contextValueUses].sort(compareUtf16)) {
+    if (!contextPresence.has(field)) {
+      const metadata = project.manifest.catalog?.fields?.[field];
+      const documented = typeof metadata?.title === 'string' && metadata.title.trim() &&
+        typeof metadata?.description === 'string' && metadata.description.trim();
+      if (documented) documentedHostContext += 1;
+      else warnings.push(`${field}: used by value logic without a not_empty rule or complete catalog documentation`);
+    }
+  }
+
+  for (const { id, artifact } of project.records) {
+    if (!['pipeline', 'condition'].includes(artifact.type) || !Array.isArray(artifact.steps)) continue;
+    const directPrerequisites = new Map();
+
+    for (const stepId of artifact.steps) {
+      if (typeof stepId !== 'string') continue;
+      const step = project.artifacts.get(stepId)?.artifact;
+      if (!step || step.type !== 'rule') continue;
+
+      const paths = primaryPaths(step);
+      const isAdvanced = !BUILTIN_OPERATORS.has(step.operator) || crossFieldOperators.has(step.operator);
+      if (isAdvanced) {
+        for (const field of paths) {
+          const guardId = directPrerequisites.get(field);
+          if (guardId) {
+            warnings.push(`${id}: ${stepId} runs directly after prerequisite ${guardId} for ${field}; gate the dependent check with a condition if malformed values would create a misleading issue`);
+          }
+        }
+      }
+
+      if (prerequisiteOperators.has(step.operator) && typeof step.field === 'string') {
+        directPrerequisites.set(step.field, stepId);
+      }
+    }
+
+    if (artifact.type === 'condition') {
+      const guards = whenRefs(artifact.when);
+      if (guards.size === 0) warnings.push(`${id}: condition has no recognizable Rules v3 when leaf`);
+    }
+  }
+
+  notes.push(`artifacts inspected: ${project.records.length}`);
+  notes.push(`context paths with explicit presence rule: ${contextPresence.size}`);
+  notes.push(`context paths documented as an external contract: ${documentedHostContext}`);
+  notes.push(`guard-order warnings: ${warnings.length}`);
 }
 
-notes.push(`artifacts inspected: ${artifacts.size}`);
-notes.push(`guard-order warnings: ${warnings.length}`);
-const exitCode = errors.length > 0 || (options.strict && warnings.length > 0) ? 1 : 0;
-if (options.json) {
-  console.log(JSON.stringify({ ok: exitCode === 0, errors, warnings, notes }, null, 2));
-} else {
-  for (const note of notes) console.log(`info: ${note}`);
-  for (const warning of warnings) console.warn(`warning: ${warning}`);
-  for (const error of errors) console.error(`error: ${error}`);
-  if (exitCode === 0) console.log('guard-order audit OK');
-}
-process.exit(exitCode);
+process.exitCode = finish({
+  errors,
+  warnings,
+  notes,
+  json: options.json,
+  strict: options.strict,
+  successMessage: 'Rules v3 guard-order audit OK'
+});

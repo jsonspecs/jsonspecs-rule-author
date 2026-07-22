@@ -1,76 +1,92 @@
-# Issue semantics
+# Issue semantics for RC.5
 
-Use this reference when designing rule codes, fields, messages, multi-field checks, and guard rules.
+Use this reference for issue codes, fields, messages, aggregates, and multi-field rules.
 
-## Single-field issue model
+## Authored issue
 
-A jsonspecs runtime issue has one primary `field`. Design rules around that constraint.
-
-For a single-field check:
+Put issue data under `rule.issue`:
 
 ```json
 {
+  "id": "customer.email.format",
+  "type": "rule",
+  "operator": "matches_regex",
   "field": "customer.email",
-  "code": "CUSTOMER.EMAIL.FORMAT",
-  "message": "Некорректный формат email"
+  "value": "^[^@]+@[^@]+$",
+  "issue": {
+    "level": "ERROR",
+    "code": "CUSTOMER.EMAIL.FORMAT",
+    "message": "Проверьте адрес электронной почты"
+  }
 }
 ```
 
-For a multi-field check, choose deliberately:
+Do not use top-level `level`, `code`, `message`, or `meta`. `issue.code` must be unique
+across the complete snapshot. Optional `issue.meta` is hashed and copied verbatim into
+every issue created by the rule.
 
-- split into separate rules when each field can fail independently;
-- use the field the user must fix first;
-- use the group/root field when the error belongs to the relationship rather than one field;
-- document related fields in the message or artifact description.
+## Runtime attribution
 
-Do not assume `rule.meta.fields` will become multiple issue fields.
+The engine chooses `field`; authors do not set a second issue field:
 
-## Contact/choice rules
+- a normal field rule uses its resolved concrete path;
+- an `EACH` wildcard issue uses the concrete matched path;
+- a summary aggregate uses the wildcard pattern;
+- `any_filled` and a custom operator without primary `field` use `field: null`.
 
-Rules such as "phone or email is required" are not ordinary phone or email format rules.
+`ruleId` is the artifact-map key. `pipelineId` is the immediately enclosing pipeline,
+including an internal nested pipeline. Do not assert a different pipeline in samples.
 
-Prefer a dedicated group-level rule:
+## Multi-field checks
+
+Use built-in `any_filled` for “phone or email is required”:
 
 ```json
 {
-  "id": "library.checkout.customer.contact_required",
+  "id": "customer.contact.required",
+  "type": "rule",
   "operator": "any_filled",
   "fields": ["customer.phone", "customer.email"],
-  "field": "customer",
-  "code": "CUSTOMER.CONTACT.REQUIRED",
-  "message": "Укажите телефон или email"
+  "issue": {
+    "level": "ERROR",
+    "code": "CUSTOMER.CONTACT.REQUIRED",
+    "message": "Укажите телефон или электронную почту"
+  }
 }
 ```
 
-Then use conditional format checks:
+The resulting issue has `field: null`; do not invent a source `field` alongside
+`fields`. Follow it with conditional format checks for each present contact.
 
-- if `customer.phone` is filled, validate phone format;
-- if `customer.email` is filled, validate email format.
+For a cross-field comparison, the primary field is the authored `field`; the resolved
+`value_field` value becomes `expected`. Choose operand direction so the issue points to
+the field the user should fix.
 
-## Guard before business
+## Levels and flow
 
-Separate contract completeness from business comparisons.
+- `WARNING`: creates a non-blocking issue.
+- `ERROR`: creates a blocking issue, but execution continues.
+- `EXCEPTION`: creates a business-stop issue and halts all remaining steps.
 
-Bad pattern:
+Technical operator failures produce `ABORT`, discard accumulated business issues, and
+return no authored issue. An operator cannot choose issue level or create its own issue.
 
-- compare `promo.expiresAt` with current date without first requiring `promo.expiresAt` when `promo.code` exists.
+## Aggregate issues
 
-Good pattern:
+For wildcard `ALL`/`ANY`:
 
-1. `promo.code` present predicate;
-2. condition: when promo code is present, require `promo.expiresAt`;
-3. condition or later check: when required promo data is complete, compare expiry date and order threshold.
+- `issueMode: "EACH"` creates issues for failed elements when the aggregate fails;
+- `issueMode: "SUMMARY"` creates one issue with normative `details`.
 
-This avoids reporting "promo expired" when the actual problem is "promo expiry is missing".
+`COUNT` always creates one summary issue on failure and forbids `issueMode`.
+`onEmpty: "FAIL"` creates one summary issue even when `EACH` was configured. Sample the
+exact expected field and details for summary behavior.
 
-## Code and level policy
+## Codes and messages
 
-- Use stable machine-readable codes: `DOMAIN.SUBJECT.PROBLEM`.
-- Keep one code per semantic problem.
-- Use `ERROR` for validation failures that block the scenario.
-- Use `WARNING` for non-blocking business advice.
-- Use `EXCEPTION` only when the scenario must stop immediately.
-
-## Message policy
-
-Messages should tell the user what is wrong and what to fix. Do not leak implementation details, operator names, or raw regex patterns unless the user needs them.
+- Keep one stable machine-readable code per semantic problem.
+- Use domain names such as `CUSTOMER.EMAIL.FORMAT`, not operator names.
+- Tell the user what is wrong or what to fix.
+- Keep implementation details and raw regular expressions out of messages.
+- Treat code, field, level, and issue order as public behavior when consumers depend on
+  them.

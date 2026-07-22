@@ -1,81 +1,122 @@
 ---
 name: jsonspecs-rule-author
-description: Author, review, refactor, govern, distribute, and validate jsonspecs rules packages and jsonspecs-cli projects. Use when designing transparent business-validation layers, manifest.json, rules artifacts, entrypoints, pipelines, conditions, dictionaries, custom operators, samples, Studio metadata, package boundaries, embedded rules engines, or standalone rules-service architecture for jsonspecs.
-license: MIT
+description: Author, review, refactor, migrate, package, and validate jsonspecs rules projects for @jsonspecs/rules v3 and jsonspecs/spec 1.0.0-rc.5. Use for formatVersion 2 snapshots, manifest.json authoring metadata, exported pipelines, rule/condition/pipeline/dictionary artifacts, guard design, samples, custom {schema,evaluate} operators, sourceHash, package boundaries, and migration from jsonspecs 2.x.
 ---
 
 # jsonspecs Rule Author
 
-Use this skill to produce maintainable jsonspecs rules packages, not merely valid JSON artifacts. Optimize for predictable package layout, reusable rule design, manifest-first Studio metadata, clear issue semantics, and repeatable CLI validation.
+Produce maintainable authoring projects whose executable output is a closed
+`formatVersion: 2` snapshot accepted by `@jsonspecs/rules` v3.
+
+## Baseline
+
+- Treat `jsonspecs/spec` `1.0.0-rc.5` as the behavior contract and
+  `@jsonspecs/rules` v3 as the Node.js implementation target.
+- Separate normative snapshot fields from authoring metadata. `manifest.json`, source
+  file `id`, folders, catalog labels, ownership, package version, and build information
+  are builder conventions; they do not belong in the executable snapshot.
+- Keep the runtime result closed: `status`, `issues`, `ruleset`, and `error` only on
+  `ABORT`. Do not add `control`, `trace`, engine version, package version, or operator-pack
+  identity to the normative result.
+- Do not use a CLI release merely because it is named `jsonspecs-cli`. Verify that it
+  explicitly builds snapshot `formatVersion: 2` for `specVersion: 1.0.0-rc.5`.
+  Otherwise use project-local scripts or the bundled validation script.
 
 ## Workflow
 
-1. Inspect `manifest.json`, `rules/`, `samples/`, `docs/`, and `operators/` before editing.
-2. Decide the rules-layer boundary: what the rules layer validates, what stays in application code, and whether rules run embedded, from a package, or through a service.
-3. Build an authoring matrix: entrypoints, payload fields, `$context` fields, dictionaries, checks, predicates, levels, codes, and execution conditions.
-4. Separate genuinely reusable artifacts from scenario-specific artifacts before creating files.
-5. Update `manifest.catalog` first for fields, entrypoints, visible artifacts, and custom operators.
-6. Express each rule with built-in DSL operators unless a domain-specific custom operator is necessary and explicitly justified.
-7. Encode guard/contract completeness rules before business comparisons so missing data does not surface as a misleading business failure.
-8. Compose shared blocks through reusable library pipelines; do not duplicate the same rule list across entrypoint flows.
-9. Add samples for each entrypoint: success, error, warning when applicable, and contract edge cases.
-10. Run `jsonspecs validate`, `jsonspecs test`, and `jsonspecs build`. When UI labels, flow rendering, conditions, or deep links matter, run `jsonspecs studio` and inspect the affected pages.
-11. Before final delivery, report the boundary decisions, scenario composition, custom-operator rationale, validation commands, and any residual warnings.
+1. Inspect `manifest.json`, `package.json`, `rules/`, `samples/`, `operators/`, `docs/`,
+   `dist/snapshot.json`, and project build scripts before editing.
+2. Confirm the execution boundary: what is validated, what remains application logic,
+   which pipelines are public, and how the snapshot and operator packs are deployed.
+3. Read `references/rules-v3-contract.md`, then build a matrix of exported pipelines,
+   payload paths, `$context.*` paths, rules, issue codes and levels, dictionaries,
+   conditions, and custom operators.
+4. Keep scenario-local artifacts local. Promote an artifact to `rules/library/` only
+   when reuse is real and its field contract and issue meaning are the same.
+5. Update authoring metadata for exports, fields, visible artifacts, and operator
+   descriptions. Never copy that metadata into the snapshot.
+6. Use built-in operators where possible. For a custom operator, define one immutable
+   name bound to `{ schema, evaluate }`; pass runtime dependencies through `field`,
+   `value_field`, or named `inputs`, and constants through `params`.
+7. Express requiredness with a presence rule. Remember that value operators skip an
+   absent `field` or `value_field`; named `inputs` are different and let a custom
+   operator observe missing members.
+8. Compose flows with string `steps`. Use conditions to gate checks whose meaning
+   depends on type, format, dictionary membership, or another business prerequisite.
+9. Add samples for every exported pipeline: success, each major blocking family,
+   warnings and exceptions where applicable, branch edges, wildcard empty/mixed cases,
+   and malformed JSON-safe inputs for custom operators.
+10. Build the snapshot in memory, compute `sourceHash` over the whole snapshot without
+    `sourceHash`, compile it with the deployed operator registry, run samples, and compare
+    any checked-in `dist/snapshot.json` with the rebuilt value.
+11. Report boundary decisions, public exports, custom-operator rationale, validation
+    commands, snapshot identity, and residual warnings.
 
 ## Reference routing
 
-- Read `references/artifact-layout.md` when creating, moving, naming, or reviewing artifacts.
-- Read `references/rule-layer-design.md` when deciding whether business checks belong in jsonspecs and where the execution boundary should sit.
-- Read `references/scenario-composition.md` before designing entrypoints, validation blocks, or multi-step business scenarios.
-- Read `references/guard-patterns.md` when ordering required, format, dictionary, cross-field, date, identifier, and boolean checks.
-- Read `references/business-language.md` when writing titles, descriptions, messages, field labels, and Studio-facing names.
-- Read `references/operator-policy.md` before adding or approving any custom operator.
-- Read `references/package-boundary.md` when packaging, versioning, publishing, or consuming a reusable rules package.
-- Read `references/distribution-options.md` when choosing between embedded execution, dependency-based distribution, a standalone rules service, or a hybrid model.
-- Read `references/rule-governance.md` when setting review, ownership, release, and audit practices for business-controlled rules.
-- Read `references/manifest-catalog.md` when editing `manifest.json`, Studio labels, field titles, entrypoint descriptions, or operator descriptions.
-- Read `references/issue-semantics.md` when designing multi-field checks, contact/choice rules, guard rules, or error codes.
-- Read `references/validation-checklist.md` before finishing a package or review.
+- Read `references/rules-v3-contract.md` for every Rules v3 or RC.5 task.
+- Read `references/artifact-layout.md` when creating, moving, naming, or migrating
+  artifacts and snapshots.
+- Read `references/rule-layer-design.md` when deciding what belongs in the rules layer.
+- Read `references/scenario-composition.md` before designing exported pipelines,
+  conditions, or reusable validation blocks.
+- Read `references/guard-patterns.md` when ordering presence, type, format, dictionary,
+  date, identifier, wildcard, or cross-field checks.
+- Read `references/business-language.md` for catalog labels and issue messages.
+- Read `references/operator-policy.md` before adding or approving a custom operator.
+- Read `references/issue-semantics.md` for issue codes, fields, aggregate issues, and
+  multi-field checks.
+- Read `references/manifest-catalog.md` when editing authoring metadata.
+- Read `references/package-boundary.md`, `references/distribution-options.md`, and
+  `references/rule-governance.md` for packaging, deployment, or governance work.
+- Read `references/validation-checklist.md` before final delivery.
 
-## Hard authoring rules
+## Hard rules
 
-- Keep `rules/library` for artifacts that are truly reusable by multiple entrypoints or domains.
-- Keep scenario-specific artifacts under `rules/entrypoints/<entrypoint>/...`.
-- Use ids that match intent and location: `library.*` for shared artifacts, `entrypoints.*` for scenario artifacts.
-- Prefer `manifest.catalog.fields[field].title` for human field names. Use `description` as supporting text, not as the primary label.
-- Treat runtime issues as single-field issues. If a rule involves several fields, choose the field deliberately or split the rule into clearer guard/business checks.
-- Add a custom operator only for domain logic that the DSL cannot express safely or clearly.
-- Never use a custom operator to repackage an existing built-in operator with a slightly different name.
+- Build a snapshot with exactly `format`, `formatVersion`, `specVersion`, `sourceHash`,
+  `exports`, and `artifacts`.
+- Use an object map for `artifacts`; remove source `id` from each artifact value.
+- Use a sorted, unique `exports` array of pipeline ids. Do not use pipeline
+  `entrypoint`.
+- Use non-empty string `steps`. Do not use `flow`, object steps, or `stepId`.
+- Put `level`, `code`, `message`, and optional `meta` inside `rule.issue`. A rule used as
+  a step must have `issue`; a rule used only in `when` may omit it.
+- Keep issue codes unique across the snapshot.
+- Do not use `role`, `strict`, `required_context`, snapshot `meta`, `engine`, or
+  `requires` in the executable graph.
+- Add `aggregate` exactly when `field` contains `[*]`. Use `ALL`, `ANY`, or `COUNT`.
+- Ensure every artifact is reachable from `exports`, including `when` rules and
+  dictionaries.
+- Keep package version and operator-pack identity in build/deployment records, not in
+  the normative runtime result.
 
-## Optional audit scripts
+## Bundled validation
 
-Run the bundled scripts from the rules project root or pass the project root explicitly:
+Run from a rules project root or pass the project path explicitly:
 
 ```bash
-node /path/to/jsonspecs-rule-author/scripts/audit-manifest-coverage.mjs .
-node /path/to/jsonspecs-rule-author/scripts/validate-package.mjs .
-node /path/to/jsonspecs-rule-author/scripts/audit-guard-order.mjs .
-node /path/to/jsonspecs-rule-author/scripts/audit-business-language.mjs .
-node /path/to/jsonspecs-rule-author/scripts/audit-sample-matrix.mjs .
-node /path/to/jsonspecs-rule-author/scripts/audit-rule-graph.mjs .
+node /path/to/scripts/audit-manifest-coverage.mjs .
+node /path/to/scripts/audit-rule-graph.mjs .
+node /path/to/scripts/audit-guard-order.mjs .
+node /path/to/scripts/audit-business-language.mjs .
+node /path/to/scripts/audit-sample-matrix.mjs .
+node /path/to/scripts/validate-package.mjs .
 ```
 
-The scripts are read-only. They check manifest coverage, artifact layout, sample coverage, stale docs markers, and CLI validation/build/test where available.
-
-Use `--strict` with `audit-manifest-coverage.mjs` when reviewing a package for release and you want warnings to fail the check.
-Use the additional audit scripts as review aids: they flag likely guard-order gaps, technical UI language, sample coverage gaps, duplicate ids, cycles, unused artifacts, and oversized entrypoints.
+The audit scripts are read-only. `validate-package.mjs` runs all audits, builds and
+compiles the snapshot in memory with the project's installed `@jsonspecs/rules`, runs
+JSON samples, and checks a committed snapshot when present. Add `--strict` to fail on
+audit warnings. It never downloads a CLI or writes `dist/`.
 
 ## Completion criteria
 
-A rules package is ready when:
-
-- every entrypoint has manifest metadata and samples;
-- every user-visible field has a catalog `title`;
-- shared logic is composed through library pipelines instead of duplicated;
-- custom operators are documented, used, and not replaceable by built-ins;
-- guard rules run before dependent business rules;
-- entrypoints read as business scenarios, not as flat dumps of checks;
-- rule, condition, field, dictionary, and operator labels use business language suitable for Studio;
-- package boundary, versioning and execution model are explicit;
-- `jsonspecs validate`, `jsonspecs test`, and `jsonspecs build` pass;
-- Studio displays meaningful field/artifact titles for affected flows.
+- The in-memory snapshot compiles under `@jsonspecs/rules` v3 for
+  `specVersion: 1.0.0-rc.5` with the deployment's operator registry.
+- Every export has catalog metadata and executable samples.
+- Required `$context.*` dependencies are enforced by rules when absence is a business
+  error and documented outside the snapshot.
+- Guard ordering prevents misleading dependent failures.
+- Custom operators use the v3 contract and have deterministic pass/fail/skip vectors.
+- The full graph is reachable, acyclic, and free of legacy fields.
+- A checked-in snapshot, if present, matches the in-memory rebuild byte-for-data after
+  JSON parsing, including `sourceHash`.

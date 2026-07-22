@@ -1,77 +1,78 @@
-# Operator policy
+# Custom operator policy for Rules v3
 
-Use this reference before creating, reviewing, or approving custom operators.
+Read this reference before adding, migrating, or approving a custom operator.
 
-## Default decision tree
+## Decision order
 
-1. Try a built-in operator.
-2. Combine built-ins through predicates, conditions, dictionaries, and pipelines.
-3. Use a dictionary for enumerations and externally managed value sets.
-4. Use a custom operator only for domain logic that cannot be represented clearly, safely, or maintainably in DSL.
-5. Document the custom operator in `manifest.catalog.operators` or operator-pack `meta.operators`.
+1. Use a built-in operator.
+2. Compose built-ins with predicate rules, conditions, pipelines, and dictionaries.
+3. Add a custom operator only for stable domain logic that cannot be expressed clearly
+   and safely with those primitives.
 
-## Built-in operator coverage
+Built-ins cover presence, types, equality, string containment and length, portable
+regular expressions, numeric/date ordering, field-to-field comparison, and dictionary
+membership. See `rules-v3-contract.md` for the complete list.
 
-Built-ins cover the common cases:
+Appropriate custom operators include checksums, regulated identifier algorithms,
+cryptographic verification over supplied values, and versioned domain scoring.
 
-```text
-not_empty
-is_empty
-equals
-not_equals
-matches_regex
-length_equals
-length_max
-contains
-greater_than
-less_than
-in_dictionary
-any_filled
-field_equals_field
-field_not_equals_field
-field_less_than_field
-field_greater_than_field
-field_less_or_equal_than_field
-field_greater_or_equal_than_field
+Do not add aliases around built-ins, `required_if`, ordinary enumerations, host-specific
+regular-expression wrappers, or convenience operators that read the whole request.
+
+## Node.js contract
+
+Register one immutable name directly as `{ schema, evaluate }`:
+
+```js
+module.exports = Object.freeze({
+  tax_id_valid: Object.freeze({
+    schema: Object.freeze({
+      type: "object",
+      properties: Object.freeze({ field: { type: "string", minLength: 1 } }),
+      required: Object.freeze(["field"]),
+      additionalProperties: false
+    }),
+    evaluate({ field }) {
+      return validTaxId(field) ? "PASS" : "FAIL";
+    }
+  })
+});
 ```
 
-Several operators support wildcard and aggregate modes. Check the project engine documentation before inventing an operator for array-wide checks.
+The old `{ check, predicate }` pack and `(rule, ctx)` function contract are not Rules
+v3. The operator receives resolved values, not paths, payload, context, `ctx.get`,
+`ctx.has`, a resolver, or the rule use site.
 
-## Good custom operators
+## Schema requirements
 
-Custom operators are appropriate for stable domain algorithms:
+- Close the top configuration object with a finite explicit property set.
+- If `inputs` is accepted, close it and enumerate all allowed names.
+- If `params` is accepted, close its immediate object and enumerate all allowed names.
+- Declare required configured input names in the schema. This requires the path in the
+  rule, not the value in every runtime input.
+- Do not accept `fields`; it is reserved for built-in `any_filled`.
+- Keep `value` and `value_field` mutually exclusive.
 
-- tax id checksum;
-- domain-specific identifier validation;
-- cryptographic or checksum validation;
-- externally specified scoring logic;
-- locale-specific date or document validation that is not a simple regex.
+Use `field` or `value_field` for value semantics. If the operator must observe that a
+path is missing, model that dependency as a named `inputs` member and handle absence via
+`"name" in inputs`.
 
-## Bad custom operators
+## Evaluation requirements
 
-Do not create custom operators for:
+- Return exactly `PASS`, `FAIL`, or `SKIP` synchronously.
+- Do not throw for malformed-but-JSON-safe business input; return a declared outcome.
+- Do not read time, locale, network, environment variables, or mutable process globals.
+- Do not mutate invocation data.
+- Never return `EXCEPTION`; business stops come from `rule.issue.level`.
 
-- stricter aliases of `matches_regex`;
-- `required_if` that can be represented as predicate + condition + `not_empty`;
-- `one_of` that should be a dictionary + `in_dictionary`;
-- field comparisons already covered by `field_*` operators;
-- convenience wrappers that only rename built-ins.
+A thrown value becomes `ABORT OPERATOR_FAULT`. Any other return value becomes
+`ABORT OPERATOR_CONTRACT_VIOLATION`.
 
-## Required custom operator contract
+## Release evidence
 
-Every custom operator must have:
+Document why built-ins are insufficient. Add golden vectors for pass, fail, skip,
+missing named inputs, JSON `null`, wrong JSON-safe types, and boundary values.
 
-- a concise rationale: why built-ins are insufficient;
-- deterministic behavior for JSON-safe inputs;
-- no prototype-chain reads or mutation of `ctx.payload`;
-- stable return shape compatible with jsonspecs operator contracts;
-- sample coverage for pass/fail and malformed-but-JSON-safe inputs;
-- a human-readable description in operator metadata.
-
-## Review questions
-
-- Can this be a dictionary?
-- Can this be `matches_regex` with a named rule and clear message?
-- Can this be a predicate condition around a normal check?
-- Is the operator reusable outside one entrypoint?
-- Will a business analyst understand the rule without reading JavaScript?
+For equivalent operators in several runtimes, version the operator pack separately,
+publish equivalent closed schemas, run the same vectors everywhere, and record each
+deployed package version and digest outside the snapshot.

@@ -1,81 +1,135 @@
-# Artifact layout and naming
+# Artifact layout and snapshot lowering
 
-Use this reference when creating, moving, or reviewing `rules/` files.
+Use this reference when creating, moving, naming, or migrating source artifacts.
 
-## Directory policy
+## Contents
 
-- `rules/library/`: reusable artifacts that are intentionally shared by more than one entrypoint or by a stable domain concept.
-- `rules/entrypoints/<entrypoint>/`: scenario-specific pipelines, conditions, predicates, and checks used only by one entrypoint.
-- `rules/dictionaries/`: dictionary artifacts.
-- `operators/node/`: project-local custom operators.
-- `samples/`: executable examples grouped by behavior or entrypoint.
+- [Two layers](#two-layers)
+- [Recommended source layout](#recommended-source-layout)
+- [Id policy](#id-policy)
+- [Pipeline composition](#pipeline-composition)
+- [Builder obligations](#builder-obligations)
+- [Promotion checklist](#promotion-checklist)
 
-Do not put scenario-specific artifacts in `rules/library` merely because they might be useful later. Promote to `library` only after reuse is real or explicitly planned.
+## Two layers
 
-## Id policy
+Keep authoring files separate from the executable snapshot.
 
-Ids should reflect scope:
-
-```text
-library.<domain>.<subject>.<rule>
-library.<domain>.pipelines.<block>
-library.<domain>.conditions.<condition>
-library.<domain>.predicates.<predicate>
-
-entrypoints.<scenario>.<pipeline>
-entrypoints.<scenario>.checks.<rule>
-entrypoints.<scenario>.conditions.<condition>
-entrypoints.<scenario>.predicates.<predicate>
-
-dictionaries.<domain>.<name>
-```
-
-Use predictable snake_case suffixes:
-
-- checks: `amount_required`, `currency_allowed`, `items_sku_format`;
-- predicates: `courier_selected`, `promo_code_present`;
-- conditions: `cond_courier_checks`, `cond_promo_checks`;
-- pipelines: `validation`, `b2b_validation`, `common_customer_checks`.
-
-## File policy
-
-Keep filenames aligned with ids:
-
-```text
-rules/library/checkout/checks/customer_name_required.json
-rules/library/checkout/pipelines/common_customer_checks.json
-rules/entrypoints/checkout/validation.json
-rules/entrypoints/checkout/conditions/cond_promo_checks.json
-rules/dictionaries/payment_methods.json
-```
-
-One artifact per JSON file is the preferred production layout because diffs, source diagnostics, and review comments stay precise.
-
-## Pipeline composition
-
-Use library pipelines for shared blocks:
+An authoring file may carry `id` for navigation:
 
 ```json
 {
   "id": "entrypoints.checkout.validation",
   "type": "pipeline",
-  "flow": [
-    { "pipeline": "library.checkout.pipelines.customer_common" },
-    { "pipeline": "library.checkout.pipelines.order_common" },
-    { "condition": "entrypoints.checkout.conditions.cond_promo_checks" }
-  ],
-  "entrypoint": true
+  "steps": ["library.checkout.customer.required"]
 }
 ```
 
-Do not copy the same rule refs into several entrypoints. Duplication makes ordering and future changes unreliable.
+The builder must lower it to an `artifacts` map and remove `id` from the value:
+
+```json
+{
+  "artifacts": {
+    "entrypoints.checkout.validation": {
+      "type": "pipeline",
+      "steps": ["library.checkout.customer.required"]
+    }
+  }
+}
+```
+
+The source `id` convention is not part of Spec 1.0.0-rc.5. If a project authors the
+snapshot map directly, preserve that project convention instead.
+
+## Recommended source layout
+
+```text
+manifest.json
+package.json
+rules/
+  entrypoints/<scenario>.json
+  entrypoints/<scenario>/...
+  library/pipelines/...
+  library/conditions/...
+  library/predicates/...
+  library/dictionaries/...
+operators/node/
+samples/
+docs/
+dist/snapshot.json
+dist/build-info.json
+```
+
+- `rules/entrypoints/`: scenario-specific artifacts.
+- `rules/library/`: artifacts with demonstrated reuse and the same business meaning.
+- `rules/library/dictionaries/`: shared dictionaries. A scenario-only dictionary may
+  remain under its entrypoint directory.
+- `operators/node/`: project-local v3 operator registry when needed.
+- `samples/`: complete calls with top-level `pipelineId`, `payload`, optional `context`,
+  and `expect`.
+
+Prefer one source artifact per JSON file. It keeps duplicate ids, review locations,
+and build diagnostics unambiguous.
+
+## Id policy
+
+Spec 1.0.0-rc.5 treats ids as opaque strings. Prefixes have no runtime meaning. The
+following naming scheme is an authoring recommendation:
+
+```text
+library.<domain>.<subject>.<check>
+library.<domain>.pipe_<block>
+library.<domain>.cond_<condition>
+library.<domain>.pred_<predicate>
+entrypoints.<scenario>
+entrypoints.<scenario>.<subject>.<check>
+```
+
+Keep names stable and case-consistent. A renamed exported pipeline is a public API
+change even when behavior is unchanged.
+
+## Pipeline composition
+
+Use exact string references:
+
+```json
+{
+  "id": "entrypoints.checkout.validation",
+  "type": "pipeline",
+  "steps": [
+    "library.checkout.pipe_customer",
+    "library.checkout.pipe_order",
+    "entrypoints.checkout.cond_promo"
+  ]
+}
+```
+
+List public pipelines in the authoring manifest `exports`; do not put `entrypoint` in
+the pipeline. Do not use `flow`, object steps, `stepId`, relative ids, or aliases in the
+snapshot.
+
+## Builder obligations
+
+Before compilation, the builder must:
+
+1. parse every source file and reject missing or duplicate source ids;
+2. remove only source-level `id` from artifact values;
+3. keep artifact schemas closed rather than silently dropping unknown fields;
+4. copy the already sorted, unique manifest `exports` into the snapshot;
+5. set `formatVersion: 2` and `specVersion: "1.0.0-rc.5"`;
+6. compute `sourceHash` over the whole snapshot without `sourceHash`;
+7. call `compileSnapshot` with the exact deployed operator registry;
+8. reject unreachable artifacts instead of pruning them silently.
+
+Keep `project`, `catalog`, ownership, descriptions, build timestamps, ruleset version,
+and operator-pack identity in authoring or build metadata outside the snapshot.
 
 ## Promotion checklist
 
 Before moving an artifact into `library`, confirm:
 
-- the id is not tied to a single entrypoint;
-- messages and codes are not scenario-specific;
-- required context is documented;
-- samples cover at least one consumer entrypoint;
-- `manifest.catalog.artifacts[id]` has a clear title.
+- at least two scenarios reuse it or reuse is explicitly required;
+- paths, messages, issue codes, and prerequisites have the same meaning;
+- required `$context.*` dependencies are documented;
+- samples cover each consumer;
+- catalog metadata remains understandable outside the original scenario.

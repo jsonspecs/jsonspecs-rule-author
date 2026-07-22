@@ -1,86 +1,95 @@
-# Manifest catalog policy
+# Authoring manifest and catalog
 
-Use this reference when editing `manifest.json` or reviewing Studio display quality.
+Use this reference when editing `manifest.json` or user-facing metadata.
 
-## Manifest-first workflow
+## Boundary
 
-Before writing artifacts, add or update catalog metadata:
+Spec 1.0.0-rc.5 does not define `manifest.json`. It defines only the executable
+snapshot. A project manifest is an authoring convention that should give the builder
+enough information without leaking metadata into the snapshot.
+
+Recommended minimum:
 
 ```json
 {
+  "project": {
+    "id": "checkout-rules",
+    "version": "3.2.0",
+    "title": "Проверки оформления заказа",
+    "description": "Правила перед регистрацией заказа",
+    "language": "ru"
+  },
+  "paths": {
+    "rules": "./rules",
+    "samples": "./samples",
+    "docs": "./docs",
+    "dist": "./dist"
+  },
+  "build": {
+    "snapshotFile": "snapshot.json",
+    "buildInfoFile": "build-info.json"
+  },
+  "specVersion": "1.0.0-rc.5",
+  "exports": ["entrypoints.checkout.validation"],
   "catalog": {
-    "fields": {
-      "customer.phone": {
-        "title": "Телефон клиента",
-        "description": "Контактный телефон для связи по заказу"
-      }
-    },
-    "entrypoints": {
-      "entrypoints.checkout.validation": {
-        "title": "Проверка заказа при оформлении",
-        "description": "Валидация чекаута перед созданием заказа"
-      }
-    },
-    "artifacts": {
-      "library.checkout.customer.name_required": {
-        "title": "Имя обязательно",
-        "description": "Проверяет, что имя клиента заполнено"
-      }
-    },
-    "operators": {
-      "tax_id_valid": {
-        "description": "должен быть корректным ИНН"
-      }
-    }
+    "fields": {},
+    "entrypoints": {},
+    "artifacts": {},
+    "operators": {}
   }
 }
 ```
 
+`project.version`, catalog data, and build settings stay outside the executable
+snapshot. `specVersion` and `exports` are copied into the snapshot by the builder.
+
 ## Field metadata
 
-- `catalog.fields[field].title` is the primary label shown to users.
-- `description` is explanatory text, not the primary label.
-- Add exact keys for wildcard rule fields such as `order.items[*].sku`.
-- Treat `$context.*` as context metadata. Document it in project docs or artifact descriptions; do not force it into payload field catalog unless the UI needs it.
+Use `catalog.fields[path].title` as the primary human label and `description` as
+supporting text. Add exact wildcard keys such as `order.items[*].sku`.
 
-## Entrypoint metadata
+Catalog `$context.*` paths when Studio or reviewers show them. In all cases, document
+their presence and semantics because the snapshot cannot declare `required_context`.
 
-Every `entrypoint: true` pipeline must have `catalog.entrypoints[id]` with:
+## Export metadata
 
-- `title`: short page/card label;
-- `description`: what request or business scenario this entrypoint validates.
+Every id in manifest `exports` should have `catalog.entrypoints[id]`:
+
+```json
+{
+  "title": "Проверка заказа",
+  "description": "Проверяет заказ перед регистрацией"
+}
+```
+
+`exports` is the authority for public runtime access. Catalog membership does not
+export a pipeline.
 
 ## Artifact metadata
 
-Add `catalog.artifacts[id]` for artifacts that appear in Studio flows or user-facing diagnostics:
+Add `catalog.artifacts[id]` for items visible in flow diagrams and diagnostics:
 
-- rules included in entrypoint flows;
-- conditions with business meaning;
-- reusable library pipelines;
-- predicates whose title appears inside condition trees.
+- issue-producing rules;
+- business conditions and their predicate leaves;
+- nested pipelines;
+- dictionaries when reviewers need a human label.
 
-Low-level helper predicates may still need titles when condition rendering would otherwise show opaque ids.
+Do not add `description` directly to RC.5 artifact values; the snapshot schema rejects
+it.
 
 ## Operator metadata
 
-For custom operators, provide either:
+Describe every custom operator in `catalog.operators[name].description` or another
+documented authoring metadata source. The v3 runtime registry itself is a flat map of
+`name -> { schema, evaluate }`; metadata is not passed to `createEngine` and not hashed
+into the snapshot unless copied into `rule.issue.meta` deliberately.
 
-- `manifest.catalog.operators[operator].description`, or
-- operator-pack `meta.operators[operator].description`.
+## Verification
 
-Use business language. Do not expose implementation names as the only explanation.
+Check that:
 
-## Studio verification
-
-Run Studio when labels matter:
-
-```bash
-jsonspecs studio --host 127.0.0.1 --port 3100
-```
-
-Check:
-
-- field labels prefer `title`, not `description`;
-- entrypoint cards are understandable;
-- condition trees use human artifact titles;
-- deep links to rules and artifacts work after refresh.
+- `exports` is unique and sorted by unsigned UTF-16 code units;
+- every export is a pipeline and has a catalog title;
+- used payload and context paths have understandable labels or docs;
+- visible ids do not leak as the only UI labels;
+- no catalog or project data appears in `dist/snapshot.json`.

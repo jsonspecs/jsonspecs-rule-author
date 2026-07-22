@@ -1,57 +1,51 @@
-# Package Boundary
+# Package boundary
 
-Use this reference when designing a reusable rules package and its public boundary.
+Use this reference for reusable rules packages and their public contract.
 
 ## Package contents
 
-A production rules package should make these parts explicit:
+- `manifest.json`: authoring identity, paths, exports, and catalog.
+- `rules/`: source artifacts carrying source-level ids.
+- `samples/`: executable calls and expected result projections.
+- `operators/`: flat v3 operator registries, if needed.
+- `dist/snapshot.json`: closed formatVersion 2 executable snapshot.
+- `dist/build-info.json`: non-normative deployment metadata.
 
-- `manifest.json`: package identity, paths, entrypoints, catalog, operator packs;
-- `rules/`: source artifacts;
-- `samples/`: executable examples and contract edge cases;
-- `operators/`: custom operators, if any;
-- `dist/snapshot.json`: reproducible build output;
-- `dist/build-info.json` or equivalent provenance data when available.
+## Public contract
 
-## Public boundary
+Treat snapshot `exports` as the callable API. Publish for each exported pipeline:
 
-Treat entrypoints as the package API. Consumers should call named entrypoints, not internal blocks.
+- nested payload and context contract;
+- issue codes, levels, fields, and stable ordering where relied on;
+- business meaning of `EXCEPTION`;
+- package version and exact snapshot `sourceHash`;
+- required operator-pack identity, version, and digest outside the snapshot.
 
-Public:
-
-- entrypoint ids;
-- expected `payload` fields;
-- required `$context` fields;
-- issue codes and levels;
-- operator pack contract;
-- package version and build hash.
-
-Internal:
-
-- helper predicates;
-- scenario-local conditions;
-- private library block structure;
-- file layout details beneath `rules/`.
+Internal pipelines, conditions, predicate rules, source folders, and catalog ids are not
+callable unless listed in `exports`.
 
 ## Versioning
 
-Classify changes before release:
+Classify by consumer impact:
 
-- Patch: wording, catalog title improvements, new samples, non-behavioral refactor.
-- Minor: new optional checks, new entrypoints, new warnings that do not block existing valid requests.
-- Major: changed input contract, removed entrypoint, changed issue code, changed blocking behavior, changed required context.
+- patch: wording/catalog improvements, tests, or a behavior-preserving refactor that
+  leaves the built snapshot behavior unchanged;
+- minor: new export, optional warning, or backward-compatible capability;
+- major: removed/renamed export, new blocking requirement, changed issue code/field,
+  changed context contract, or changed business outcome for existing valid input.
 
-If a package is consumed by several services, document whether consumers pin exact versions or ranges.
+Changing only authoring file layout may still change `sourceHash` if the lowered
+snapshot changes. Verify the built data rather than assuming a refactor is neutral.
 
-## Samples as executable documentation
+## Reproducibility
 
-Samples should cover:
+Build information should record at least:
 
-- valid request;
-- each major reject family;
-- edge cases for optional fields and branch predicates;
-- warning-only cases when supported;
-- malformed-but-JSON-safe custom operator inputs.
+- package id and semantic version;
+- `specVersion` and snapshot `sourceHash`;
+- exported pipeline ids;
+- `@jsonspecs/rules` version used for compilation;
+- operator-pack id, version, and immutable digest;
+- source revision and build environment identity when required by governance.
 
-Keep samples close to business scenarios. Do not create only microscopic unit-like samples unless they are paired with scenario-level examples.
-
+Do not add these fields to the closed snapshot or normative runtime `ruleset` object.

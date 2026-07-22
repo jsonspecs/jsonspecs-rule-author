@@ -1,66 +1,57 @@
-# Rule Layer Design
+# Rule layer design
 
-Use this reference when deciding what belongs in a jsonspecs rules layer and what belongs in application code, workflow orchestration, or integration adapters.
+Use this reference to decide what belongs in jsonspecs and what remains application,
+workflow, or integration logic.
 
-## Rules layer purpose
+## Suitable responsibilities
 
-The rules layer should make business checks transparent, reviewable, testable, and versioned.
+- request completeness and type checks;
+- eligibility, prohibitions, and deterministic business comparisons;
+- dictionaries, formats, dates, identifiers, and cross-field consistency;
+- stable issue codes, levels, fields, and business-readable messages;
+- deterministic decisions from nested `payload` plus explicit `context`.
 
-Good responsibilities:
+Keep these outside the rules engine:
 
-- validate request completeness and business eligibility;
-- check formats, dictionaries, cross-field consistency, dates, identifiers, and business prohibitions;
-- return stable issue codes and business-readable messages;
-- provide trace/provenance for audit and explanation;
-- stay deterministic for `payload + context`.
+- external calls, database reads, and mutable caches;
+- enrichment or mutation of business data;
+- transport mapping, persistence, retries, and workflow lifecycle;
+- time, locale, tenant, or feature flags read from ambient process state;
+- deployment identity and audit persistence.
 
-Poor responsibilities:
-
-- call external systems;
-- enrich or mutate domain data;
-- perform routing, persistence, retries, or workflow lifecycle decisions;
-- hide transport mapping or integration DTO construction;
-- become a general-purpose scripting layer for arbitrary backend logic.
-
-## Boundary contract
-
-Design the rules runtime around this contract:
+## Runtime contract
 
 ```text
-input  = payload + context
-output = status + control + issues + trace + ruleset provenance
+input  = pipelineId + payload + optional context
+output = status + issues + ruleset + error only on ABORT
 ```
 
-`payload` is the business object under validation. `$context` is execution metadata such as current date, tenant, merchant, feature flags, jurisdiction, or channel.
+`$context.*` paths resolve against the separate `context` object. The special
+`payload.__context` convention does not exist in RC.5.
 
-Document every `$context.*` dependency in the entrypoint `required_context` or project docs. Avoid hidden ambient state.
+The snapshot cannot declare `required_context`. If missing context is a business error,
+add an ordinary presence rule such as `not_empty` on `$context.currentDate` and place it
+before dependent checks. Document the context contract in the catalog or project docs.
 
-## Status and control
+## Status boundary
 
-Use the jsonspecs runtime status vocabulary:
+- `OK`: no issues.
+- `OK_WITH_WARNINGS`: warning issues only.
+- `ERROR`: at least one error and no exception.
+- `EXCEPTION`: a business stop from an `EXCEPTION` issue.
+- `ABORT`: the accepted call could not be evaluated because input or an operator failed.
 
-- `OK`: no blocking issue;
-- `OK_WITH_WARNINGS`: only non-blocking warning issues were produced;
-- `ERROR`: validation issue that blocks the scenario;
-- `EXCEPTION`: business stop that is not an ordinary field fix;
-- `ABORT`: runtime or infrastructure failure normalized by the engine.
-
-Use issue levels separately:
-
-- `WARNING`: non-blocking business advice;
-- `ERROR`: blocking validation issue;
-- `EXCEPTION`: business stop.
-
-Do not let the rules layer decide the full process outcome. The host application or workflow maps rules output to process outcomes.
+There is no `control` field. The host maps `status` and issue codes to its process
+outcomes. Trace and implementation diagnostics, when needed, use a separate
+non-normative interface.
 
 ## Design questions
 
-Before writing rules, answer:
-
-- What business scenario is this entrypoint validating?
-- Which fields are target contract fields?
-- Which values are reference/dictionary values?
-- Which checks depend on current date or tenant context?
-- Which checks are hard rejects, soft warnings, or manual-review signals?
-- Which decisions must be visible to business reviewers?
-- Which checks are better as ordinary application code because they mutate data or call external systems?
+- Which business scenario does each exported pipeline validate?
+- Which input and context paths form its contract?
+- Which missing context values are business issues rather than caller errors?
+- Which issue levels are blocking, advisory, or immediate business stops?
+- Which values are versioned dictionaries?
+- Which checks need custom domain code after built-ins are exhausted?
+- Which package and operator-pack identity must deployment logs retain outside the
+  runtime result?

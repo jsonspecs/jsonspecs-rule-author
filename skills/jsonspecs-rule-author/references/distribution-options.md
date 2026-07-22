@@ -1,79 +1,47 @@
-# Distribution Options
+# Distribution options
 
-Use this reference when choosing how a rules layer is executed and distributed.
+Use this reference to choose how a formatVersion 2 snapshot and its operator registry
+reach consumers.
 
-## Embedded engine
+## Embedded runtime
 
-The application embeds the jsonspecs engine and loads rules locally.
+The application bundles `@jsonspecs/rules`, the snapshot, and operator registry.
 
-Best when:
-
-- latency must be low;
-- validation is part of request handling;
-- the host application already owns deployment and observability;
-- rules change with the application release cadence.
-
-Tradeoffs:
-
-- simplest runtime path;
-- no network dependency;
-- rule rollout is tied to application deployment;
-- each application must upgrade the package.
+Use it for low latency and a single deployment owner. The application release must pin
+all three parts and log their versions or digests.
 
 ## Rules package dependency
 
-Rules are published as a package, such as npm, Maven, or PyPI, and applications execute them locally.
+Publish source metadata, `dist/snapshot.json`, build information, and operator code as a
+versioned package. Consumers execute locally and pin a package version.
 
-Best when:
+This gives reproducible local calls but requires an explicit consumer upgrade policy.
+Do not let a broad dependency range silently change blocking behavior.
 
-- several services need the same rules;
-- rules should be versioned independently;
-- runtime calls must stay local;
-- consumers can pin and upgrade versions deliberately.
+## Standalone service
 
-Tradeoffs:
+A service owns compilation, deployment, execution, authentication, and audit logging.
+Use it when several languages or teams need a central rules contract.
 
-- strong reproducibility;
-- good CI/CD fit;
-- consumers may drift across versions;
-- package boundary and changelog discipline become important.
+The service API is separate from the RC.5 runtime result. Define transport errors,
+timeouts, retries, authorization, request limits, and version negotiation in the service
+contract rather than adding fields to the snapshot or result.
 
-## Standalone rules service
+## Hybrid
 
-A separate service hosts the engine and rules. Applications call it over the network.
+Use one versioned snapshot package as the source of truth. Some consumers embed it;
+others call a service that deploys the same snapshot and equivalent operator pack.
 
-Best when:
+Equality across runtimes is guaranteed by the core specification only for built-in
+operators. For custom operators, require equivalent closed schemas and shared golden
+vectors, then record package versions and immutable digests for each implementation.
 
-- several technology stacks need the same validation;
-- business wants centralized audit, UI, or rule-management workflows;
-- rules must be updated without redeploying every consumer;
-- validation latency and availability can be managed as a service dependency.
+## Decision questions
 
-Tradeoffs:
-
-- centralized governance and observability;
-- easier cross-language adoption;
-- introduces network latency, service SLA, retries, auth, version negotiation, and failure modes;
-- request/response contract must be stable and documented.
-
-## Hybrid model
-
-Use the rules package as the source of truth. Run it embedded in some consumers and expose the same package through a rules service for others.
-
-This is often the mature option:
-
-- package owns rules, samples, operators, and versioning;
-- backend services can embed the package for low latency;
-- a rules service can provide cross-language access and centralized audit;
-- both execution modes share the same snapshot and provenance.
-
-## Decision checklist
-
-- How many consumers need the rules?
-- Are consumers all in the same language/runtime?
-- How often do rules change?
-- Is centralized audit required?
-- Can callers tolerate a network dependency?
-- Who owns rule rollout and rollback?
-- Do rules need tenant-specific or channel-specific context?
-
+- How many consumers and runtime languages exist?
+- Can calls tolerate a network dependency?
+- Who owns snapshot and operator-pack rollout and rollback?
+- Must consumers pin exact versions?
+- How are `sourceHash`, package version, runtime version, and operator-pack digest joined
+  in audit records?
+- How are payload and context size, authentication, and tenant isolation enforced?

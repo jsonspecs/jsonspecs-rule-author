@@ -1,102 +1,133 @@
-# Guard Patterns
+# Guard patterns for Rules v3
 
-Use this reference when ordering rules so users see the primary problem instead of noisy dependent errors.
+Use this reference to prevent dependent checks from producing misleading issues.
 
-## Core principle
+## Contents
 
-Do not run a dependent business check unless the data it depends on is present and structurally valid.
+- [Absence semantics](#absence-semantics)
+- [Format before domain algorithm](#format-before-domain-algorithm)
+- [Common chains](#common-chains)
+- [Cross-field comparisons](#cross-field-comparisons)
+- [Context guards](#context-guards)
+- [Wildcards](#wildcards)
+- [Review test](#review-test)
 
-Bad:
+## Absence semantics
+
+Requiredness is always a separate presence rule. In Rules v3:
+
+- `not_empty`, `is_empty`, `not_true`, and `any_filled` observe absent paths;
+- every other built-in and every custom operator receives core-level `SKIP` when its
+  configured `field` or `value_field` is absent;
+- named custom-operator `inputs` do not trigger core-level `SKIP`; unresolved inputs are
+  omitted from `invocation.inputs`.
+
+This direct sequence is safe for an absent value because the second rule skips:
 
 ```json
-[
-  { "rule": "customer.inn_required" },
-  { "rule": "customer.inn_format" },
-  { "rule": "customer.inn_checksum" }
-]
+{
+  "type": "pipeline",
+  "steps": ["customer.inn.required", "customer.inn.format"]
+}
 ```
 
-If `inn` is empty, this can report required, format, and checksum at once.
+It does not stop a malformed non-empty value from reaching later checks. Use a condition
+when format, type, dictionary membership, or another business prerequisite must pass
+before the next check has meaning.
 
-Good:
+## Format before domain algorithm
 
-```json
-[
-  { "rule": "customer.inn_required" },
-  { "condition": "customer.cond_inn_if_present" }
-]
+```text
+required step
+format step
+condition when format predicate passes
+  checksum/domain step
 ```
 
-`cond_inn_if_present` runs format only when the field is present. Checksum runs only when the format predicate passes.
+Use separate format artifacts when both an issue-producing step and a guard are needed:
+
+- `customer.inn.format` contains `issue` and appears as a step;
+- `customer.inn.pred_format` may use the same operator without `issue` in `when`;
+- `customer.inn.cond_checksum` gates the checksum step.
+
+This duplication is semantic, not accidental: one rule reports a problem, while the
+other is a side-effect-free condition leaf. If the project allows a rule with `issue` in
+`when`, reuse it there; RC.5 ignores `issue` during `when` evaluation.
 
 ## Common chains
 
 Identifier:
 
 ```text
-required -> if_present -> format -> checksum
+required → format → if format passes: checksum
 ```
 
-Identifier with mask:
+Type-specific document:
 
 ```text
-required -> if_present -> length/format -> mask -> checksum
-```
-
-Dictionary/type:
-
-```text
-required -> if_present -> dictionary -> type_specific_block
+type required → type supported → if supported type: type-specific required fields
 ```
 
 Dates:
 
 ```text
-required -> if_present -> format -> not_future/not_past -> cross_date_order
+required context date → required business date → format → if both formats pass: compare
 ```
 
-Optional dates:
+Optional date:
 
 ```text
-if_present -> format -> business comparison
+if present → format issue → if format passes: business comparison
 ```
 
-Country:
+Boolean policy:
 
 ```text
-required -> if_present -> country_format -> allowed/forbidden country
-```
-
-Boolean/regulatory flag:
-
-```text
-required -> is_boolean -> value_constraint
+required → type is boolean → if boolean: value constraint
 ```
 
 Choice group:
 
 ```text
-one_of_required -> each_present_value_format
+any_filled step → for each present choice: format condition
 ```
 
-Document type:
+Dictionary branch:
 
 ```text
-type_required -> type_supported -> type_specific_required_fields
+required → supported-value issue → if supported value: branch-specific block
 ```
 
-## Custom operator inputs
+## Cross-field comparisons
 
-Guard custom operators especially carefully. A custom operator should not receive malformed dates, absent identifiers, or unsupported types unless its contract explicitly says how those inputs are handled.
+Cross-field operators skip if either operand is absent. They do not verify that strings
+are valid dates, numbers are in the domain range, or categories are supported. Gate a
+comparison behind prerequisite predicates when an invalid-but-present value would make
+the comparison issue misleading.
 
-If a custom operator cannot produce a valid check result for malformed inputs, guard it with predicates rather than relying on the operator to return a special status.
+## Context guards
 
-## Error priority
+There is no `required_context` artifact field. When missing context must be a business
+issue, use `not_empty` on `$context.*` as an early step. Then gate format-sensitive or
+domain-sensitive comparisons as usual.
 
-Prefer one primary fix per field:
+If missing context is a caller contract violation that should not become a business
+issue, validate it in the host before `runPipeline`; do not invent a new runtime result
+field or `ABORT` code.
 
-- missing field: report `REQUIRED`, not `FORMAT`;
-- invalid format: report `FORMAT`, not checksum or date order;
-- unsupported type: report unsupported type, not required fields for that type;
-- expired date: do not also report date order unless both are independently meaningful to the business user.
+## Wildcards
 
+For a wildcard rule, decide separately:
+
+- whether no structural matches means `PASS`, `FAIL`, or `SKIP` via `onEmpty`;
+- whether `ALL`/`ANY` failures are per element (`EACH`) or one group issue (`SUMMARY`);
+- whether `COUNT` expresses the real business rule better.
+
+Every match is evaluated; aggregate modes do not short-circuit. Guard the operator's
+input contract before a custom wildcard rule where possible, and sample empty, all-pass,
+mixed, all-fail, and all-skip populations that matter to the scenario.
+
+## Review test
+
+For each issue-producing rule, ask: “Can the user fix this issue without first fixing a
+different prerequisite?” If not, add or strengthen a condition.
