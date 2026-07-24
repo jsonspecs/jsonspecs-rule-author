@@ -29,33 +29,42 @@ Produce maintainable authoring projects whose executable output is a closed
 
 1. Inspect `manifest.json`, `package.json`, `rules/`, `samples/`, `operators/`, `docs/`,
    `dist/snapshot.json`, and project build scripts before editing.
-2. Confirm the execution boundary: what is validated, what remains application logic,
+2. Before designing new rules or scenarios, study the task and describe the proposed
+   solution to the user: the business behavior, inputs and context, branches, issue
+   semantics, and the boundary between validation and application logic.
+3. Search the package for existing exported and internal pipelines, rules, conditions,
+   dictionaries, and operators that can implement the task. Search by business terms,
+   payload and context paths, issue codes and messages, and artifact ids. Prefer
+   composing or extending compatible artifacts. Create a new artifact only after
+   recording why the existing candidates do not match the same field contract and
+   business meaning; do not duplicate an existing scenario or check.
+4. Confirm the execution boundary: what is validated, what remains application logic,
    which pipelines are public, and how the snapshot and operator packs are deployed.
-3. Read `references/rules-v4-contract.md`, then build a matrix of exported pipelines,
+5. Read `references/rules-v4-contract.md`, then build a matrix of exported pipelines,
    payload paths, `$context.*` paths, rules, issue codes and levels, dictionaries,
    conditions, and custom operators.
-4. Keep scenario-local artifacts local. Promote an artifact to `rules/library/` only
+6. Keep scenario-local artifacts local. Promote an artifact to `rules/library/` only
    when reuse is real and its field contract and issue meaning are the same.
-5. Update authoring metadata for exports, fields, visible artifacts, and operator
+7. Update authoring metadata for exports, fields, visible artifacts, and operator
    descriptions. Never copy that metadata into the snapshot.
-6. Use built-in operators where possible. For a custom operator, define one immutable
+8. Use built-in operators where possible. For a custom operator, define one immutable
    name bound to `{ schema, evaluate }`; pass runtime dependencies through `field`,
    `value_field`, or named `inputs`, and constants through `params`.
-7. Express requiredness with a presence rule. Remember that value operators skip an
+9. Express requiredness with a presence rule. Remember that value operators skip an
    absent `field` or `value_field`; named `inputs` are different and let a custom
    operator observe missing members.
-8. Compose flows with string `steps`. Use conditions to gate checks whose meaning
+10. Compose flows with string `steps`. Use conditions to gate checks whose meaning
    depends on type, format, dictionary membership, or another business prerequisite.
-9. Add samples for every exported pipeline: success, each major blocking family,
+11. Add samples for every exported pipeline: success, each major blocking family,
    warnings and exceptions where applicable, branch edges, wildcard empty/mixed cases,
    omitted members after the final wildcard, malformed JSON-safe inputs for custom
    operators, and every reachable issue code or a documented exclusion with a reason.
-10. Run `jsonspecs validate --fail-on-warning` and `jsonspecs test` with the project-local
+12. Run `jsonspecs validate --fail-on-warning` and `jsonspecs test` with the project-local
     CLI v4. Build through CLI v4 when distribution files must change, then compare any
     checked-in snapshot with an independent in-memory rebuild.
-11. Run `jsonspecs sandbox` when labels, condition trees, flow links, or sample execution
+13. Run `jsonspecs sandbox` when labels, condition trees, flow links, or sample execution
     need visual inspection. Never expose Sandbox as a production service.
-12. Report boundary decisions, public exports, custom-operator rationale, validation
+14. Report boundary decisions, public exports, custom-operator rationale, validation
     commands, snapshot identity, and residual warnings.
 
 ## Reference routing
